@@ -9,38 +9,148 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TicketsRouteImport } from './routes/tickets'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as SavedRouteImport } from './routes/saved'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SpotIdRouteImport } from './routes/spot.$id'
+import { Route as BookingIdRouteImport } from './routes/booking.$id'
 
+const TicketsRoute = TicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SavedRoute = SavedRouteImport.update({
+  id: '/saved',
+  path: '/saved',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpotIdRoute = SpotIdRouteImport.update({
+  id: '/spot/$id',
+  path: '/spot/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BookingIdRoute = BookingIdRouteImport.update({
+  id: '/booking/$id',
+  path: '/booking/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/profile': typeof ProfileRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
+  '/booking/$id': typeof BookingIdRoute
+  '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/profile': typeof ProfileRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
+  '/booking/$id': typeof BookingIdRoute
+  '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/profile': typeof ProfileRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/tickets': typeof TicketsRoute
+  '/booking/$id': typeof BookingIdRoute
+  '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/profile'
+    | '/saved'
+    | '/search'
+    | '/tickets'
+    | '/booking/$id'
+    | '/spot/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/profile'
+    | '/saved'
+    | '/search'
+    | '/tickets'
+    | '/booking/$id'
+    | '/spot/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/profile'
+    | '/saved'
+    | '/search'
+    | '/tickets'
+    | '/booking/$id'
+    | '/spot/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ProfileRoute: typeof ProfileRoute
+  SavedRoute: typeof SavedRoute
+  SearchRoute: typeof SearchRoute
+  TicketsRoute: typeof TicketsRoute
+  BookingIdRoute: typeof BookingIdRoute
+  SpotIdRoute: typeof SpotIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tickets': {
+      id: '/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof TicketsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/saved': {
+      id: '/saved'
+      path: '/saved'
+      fullPath: '/saved'
+      preLoaderRoute: typeof SavedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +158,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/spot/$id': {
+      id: '/spot/$id'
+      path: '/spot/$id'
+      fullPath: '/spot/$id'
+      preLoaderRoute: typeof SpotIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/booking/$id': {
+      id: '/booking/$id'
+      path: '/booking/$id'
+      fullPath: '/booking/$id'
+      preLoaderRoute: typeof BookingIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ProfileRoute: ProfileRoute,
+  SavedRoute: SavedRoute,
+  SearchRoute: SearchRoute,
+  TicketsRoute: TicketsRoute,
+  BookingIdRoute: BookingIdRoute,
+  SpotIdRoute: SpotIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

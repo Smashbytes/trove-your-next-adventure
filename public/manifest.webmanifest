@@ -1,0 +1,14 @@
+{
+  "name": "TROVE — Decide. Book. Show Up.",
+  "short_name": "TROVE",
+  "description": "Discover and book the best nightlife, comedy, and adventures in South Africa.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0612",
+  "theme_color": "#e91e8c",
+  "icons": [
+    { "src": "/trove-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/trove-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
+  ]
+}
