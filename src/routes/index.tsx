@@ -17,7 +17,7 @@ export const Route = createFileRoute("/")({
   component: Discover,
 });
 
-const tabs = ["Following", "For You", "Trending"] as const;
+const tabs = ["For You", "Community", "Trending"] as const;
 const categories: Array<"All" | Category> = ["All", "Nightlife", "Comedy", "Adventure", "Chill"];
 const stories = spots.slice(0, 6);
 
@@ -28,7 +28,7 @@ function Discover() {
   const feed =
     tab === "Trending"
       ? [...filtered].sort((a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax)
-      : tab === "Following"
+      : tab === "Community"
         ? filtered.filter((s) => s.friendsGoing.length > 0)
         : filtered;
 
