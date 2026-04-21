@@ -1,44 +1,19 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Heart, MessageCircle, Send, Bookmark, MapPin, Star } from "lucide-react";
+import { MapPin, Star, Clock, ArrowUpRight, Ticket } from "lucide-react";
 import { CapacityPill } from "./CapacityBar";
 import { formatDate, formatTime, formatPrice, type Spot } from "@/lib/spots";
-import { toggleSaved, useStore, getSaved } from "@/lib/store";
 
 export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
-  const saved = useStore(() => getSaved()).includes(spot.id);
-  const likes = 800 + Math.floor((spot.rating * spot.reviews) % 9000);
-  const comments = Math.max(12, Math.floor(spot.reviews / 4));
-
   return (
     <motion.article
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.45, ease: "easeOut" }}
-      className="relative overflow-hidden rounded-3xl bg-surface ring-1 ring-border/50"
+      className="group relative overflow-hidden rounded-3xl bg-surface ring-1 ring-border/50"
     >
-      {/* Post header — host row */}
-      <header className="flex items-center justify-between px-3.5 pt-3 pb-2.5">
-        <div className="flex items-center gap-2.5">
-          <div className="relative">
-            <div className="rounded-full p-[2px] bg-gradient-brand">
-              <div className="h-9 w-9 rounded-full bg-background grid place-items-center font-display text-xs">
-                {spot.hostName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
-              </div>
-            </div>
-          </div>
-          <div className="leading-tight">
-            <p className="text-[13px] font-semibold">{spot.hostName}</p>
-            <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-              <MapPin className="h-2.5 w-2.5" /> {spot.area} · {spot.city}
-            </p>
-          </div>
-        </div>
-        <CapacityPill spot={spot} />
-      </header>
-
-      {/* Media */}
-      <Link to="/spot/$id" params={{ id: spot.id }} className="relative block">
+      <Link to="/spot/$id" params={{ id: spot.id }} className="block">
+        {/* Media */}
         <div className="relative aspect-[4/5] overflow-hidden bg-black">
           <img
             src={spot.image}
@@ -46,104 +21,82 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
             loading="lazy"
             width={1024}
             height={1280}
-            className="h-full w-full object-cover transition-transform duration-700 hover:scale-[1.03]"
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
           />
-          {/* Top chip row */}
+
+          {/* Top: category + capacity */}
           <div className="absolute inset-x-3 top-3 flex items-center justify-between">
-            <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+            <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
               {spot.category}
             </span>
-            <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold">
-              {formatDate(spot.date)} · {formatTime(spot.date)}
-            </span>
+            <CapacityPill spot={spot} />
           </div>
 
-          {/* Bottom gradient + caption */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent pt-24 pb-4 px-4">
+          {/* Futuristic HUD corners */}
+          <div className="pointer-events-none absolute inset-3">
+            <span className="absolute -left-px -top-px h-3 w-3 border-l border-t border-primary/70" />
+            <span className="absolute -right-px -top-px h-3 w-3 border-r border-t border-accent/70" />
+            <span className="absolute -bottom-px -left-px h-3 w-3 border-b border-l border-accent/70" />
+            <span className="absolute -bottom-px -right-px h-3 w-3 border-b border-r border-primary/70" />
+          </div>
+
+          {/* Bottom gradient + content */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent pt-28 pb-4 px-4">
+            {/* Date / time strip */}
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-2.5 py-1 ring-1 ring-white/15">
+              <Clock className="h-3 w-3 text-accent" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-white/90">
+                {formatDate(spot.date)} · {formatTime(spot.date)}
+              </span>
+            </div>
             <h3 className="font-display text-2xl leading-[0.95] tracking-tight text-white">
               {spot.name}
             </h3>
             <p className="mt-1 text-[12px] text-white/70 line-clamp-1">{spot.tagline}</p>
-          </div>
 
-          {/* Right-side action rail (TikTok/IG reels style) */}
-          <div className="absolute right-2.5 bottom-24 flex flex-col items-center gap-3.5">
-            <ActionBtn
-              onClick={(e) => { e.preventDefault(); toggleSaved(spot.id); }}
-              icon={<Heart className={`h-5 w-5 ${saved ? "fill-primary text-primary" : "text-white"}`} />}
-              label={kFmt(likes + (saved ? 1 : 0))}
-            />
-            <ActionBtn
-              icon={<MessageCircle className="h-5 w-5 text-white" />}
-              label={kFmt(comments)}
-            />
-            <ActionBtn
-              icon={<Send className="h-5 w-5 text-white" />}
-              label="Share"
-            />
-            <ActionBtn
-              onClick={(e) => { e.preventDefault(); toggleSaved(spot.id); }}
-              icon={<Bookmark className={`h-5 w-5 ${saved ? "fill-accent text-accent" : "text-white"}`} />}
-              label="Save"
-            />
+            {/* Meta row */}
+            <div className="mt-2.5 flex items-center gap-3 text-[11px] text-white/75">
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {spot.area}
+              </span>
+              <span className="h-3 w-px bg-white/20" />
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3 w-3 fill-warning text-warning" /> {spot.rating}
+              </span>
+              <span className="h-3 w-px bg-white/20" />
+              <span className="font-mono">{spot.city}</span>
+            </div>
           </div>
         </div>
       </Link>
 
-      {/* Footer — friends + price */}
-      <footer className="flex items-center justify-between px-3.5 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          {spot.friendsGoing.length > 0 ? (
-            <>
-              <div className="flex -space-x-2">
-                {spot.friendsGoing.slice(0, 3).map((f) => (
-                  <div
-                    key={f.id}
-                    className="grid h-6 w-6 place-items-center rounded-full ring-2 ring-surface text-[10px] font-bold text-white"
-                    style={{ background: `oklch(0.6 0.22 ${f.hue})` }}
-                  >
-                    {f.initial}
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground truncate">
-                <span className="text-foreground font-medium">{spot.friendsGoing[0].name}</span>
-                {spot.friendsGoing.length > 1 && ` + ${spot.friendsGoing.length - 1} more`} going
-              </p>
-            </>
-          ) : (
-            <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-              <Star className="h-3 w-3 fill-warning text-warning" />
-              {spot.rating} · {spot.reviews} reviews
+      {/* Footer — host + price CTA */}
+      <footer className="flex items-center justify-between gap-3 px-3.5 py-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="rounded-full p-[1.5px] bg-gradient-brand">
+            <div className="h-8 w-8 rounded-full bg-background grid place-items-center font-display text-[11px]">
+              {spot.hostName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+            </div>
+          </div>
+          <div className="leading-tight min-w-0">
+            <p className="text-[12px] font-semibold truncate">{spot.hostName}</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {spot.friendsGoing.length > 0
+                ? `${spot.friendsGoing.length} from your community going`
+                : `${spot.reviews} reviews`}
             </p>
-          )}
+          </div>
         </div>
         <Link
           to="/spot/$id"
           params={{ id: spot.id }}
-          className="shrink-0 rounded-full bg-gradient-brand px-3.5 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow-soft"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-brand px-3.5 py-2 text-[11px] font-semibold text-primary-foreground shadow-glow-soft"
         >
+          <Ticket className="h-3.5 w-3.5" />
           {formatPrice(spot.price)}
+          <ArrowUpRight className="h-3 w-3" />
         </Link>
       </footer>
     </motion.article>
   );
-}
-
-function ActionBtn({
-  icon, label, onClick,
-}: { icon: React.ReactNode; label: string; onClick?: (e: React.MouseEvent) => void }) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-0.5 active:scale-90 transition">
-      <span className="grid h-10 w-10 place-items-center rounded-full glass-strong">
-        {icon}
-      </span>
-      <span className="text-[10px] font-semibold text-white drop-shadow">{label}</span>
-    </button>
-  );
-}
-
-function kFmt(n: number) {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
 }
