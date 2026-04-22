@@ -2,7 +2,7 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar } from "lucide-react";
 import { getHost, formatDate, formatTime, formatPrice } from "@/lib/spots";
-import { isFollowing, toggleFollow, useStore, getFollows } from "@/lib/store";
+import { toggleFollow, useStore, getFollows } from "@/lib/store";
 
 export const Route = createFileRoute("/host/$slug")({
   head: ({ params }) => {
@@ -152,5 +152,3 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     </div>
   );
 }
-
-export { isFollowing }; // keep tree-shake friendly
