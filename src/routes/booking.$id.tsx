@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowLeft, MessageCircle } from "lucide-react";
-import { getBooking } from "@/lib/store";
+import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send } from "lucide-react";
+import { getBooking, markSplitPaid, useStore } from "@/lib/store";
 import { formatDate, formatPrice, formatTime, getSpot } from "@/lib/spots";
 
 export const Route = createFileRoute("/booking/$id")({
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/booking/$id")({
 
 function BookingPage() {
   const { id } = useParams({ from: "/booking/$id" });
-  const booking = getBooking(id);
+  const booking = useStore(() => getBooking(id));
   const spot = booking ? getSpot(booking.spotId) : null;
 
   if (!booking || !spot) {
@@ -22,6 +22,11 @@ function BookingPage() {
       </div>
     );
   }
+
+  const split = booking.split;
+  const paidCount = split?.participants.filter((p) => p.paid).length ?? 0;
+  const collected = split ? paidCount * split.perPerson : 0;
+  const progress = split ? (paidCount / split.participants.length) * 100 : 0;
 
   return (
     <div className="mx-auto min-h-screen max-w-md p-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-12">
@@ -82,6 +87,86 @@ function BookingPage() {
           <p className="mt-1 text-center text-[11px] text-muted-foreground">Show at entry · Total {formatPrice(booking.total)}</p>
         </div>
       </motion.div>
+
+      {/* Split bill tracker */}
+      {split && (
+        <motion.section
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="mt-6 rounded-3xl bg-surface ring-1 ring-border p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-brand shadow-glow-soft">
+                <Users2 className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <div>
+                <h3 className="font-display text-lg">Split with friends</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {formatPrice(split.perPerson)} per person
+                </p>
+              </div>
+            </div>
+            <button className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-[11px] font-semibold">
+              <Send className="h-3 w-3" /> Remind
+            </button>
+          </div>
+
+          {/* Progress */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>{paidCount} of {split.participants.length} paid</span>
+              <span className="text-foreground font-semibold">
+                {formatPrice(collected)} / {formatPrice(booking.total)}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-surface-elevated overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="h-full bg-gradient-brand shadow-glow"
+              />
+            </div>
+          </div>
+
+          {/* Participants */}
+          <ul className="space-y-2">
+            {split.participants.map((p) => (
+              <li
+                key={p.friendId}
+                className="flex items-center gap-3 rounded-2xl bg-surface-elevated p-3"
+              >
+                <div
+                  className="grid h-9 w-9 place-items-center rounded-full font-display text-sm text-white"
+                  style={{ background: `oklch(0.65 0.22 ${p.hue})` }}
+                >
+                  {p.initial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{p.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{formatPrice(split.perPerson)}</p>
+                </div>
+                {p.friendId === "me" ? (
+                  <span className="rounded-full bg-success/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-success">
+                    Paid
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => markSplitPaid(booking.id, p.friendId)}
+                    className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                      p.paid
+                        ? "bg-success/15 text-success"
+                        : "bg-foreground/10 text-foreground"
+                    }`}
+                  >
+                    {p.paid ? "Paid" : "Mark paid"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </motion.section>
+      )}
 
       <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-success/15 py-3 text-sm font-semibold text-success">
         <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp

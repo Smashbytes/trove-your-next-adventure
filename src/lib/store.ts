@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 
 const SAVED_KEY = "trove:saved";
 const BOOKINGS_KEY = "trove:bookings";
+const FOLLOWS_KEY = "trove:follows";
+
+export interface SplitParticipant {
+  friendId: string;
+  name: string;
+  initial: string;
+  hue: number;
+  paid: boolean;
+}
 
 export interface Booking {
   id: string;
@@ -11,6 +20,10 @@ export interface Booking {
   total: number;
   createdAt: string;
   ticketCode: string;
+  split?: {
+    participants: SplitParticipant[];
+    perPerson: number;
+  };
 }
 
 type Listener = () => void;
@@ -47,6 +60,29 @@ export function addBooking(b: Omit<Booking, "id" | "createdAt" | "ticketCode">):
   return booking;
 }
 export function getBooking(id: string) { return getBookings().find((b) => b.id === id); }
+export function markSplitPaid(bookingId: string, friendId: string) {
+  const all = getBookings();
+  const next = all.map((b) => {
+    if (b.id !== bookingId || !b.split) return b;
+    return {
+      ...b,
+      split: {
+        ...b.split,
+        participants: b.split.participants.map((p) =>
+          p.friendId === friendId ? { ...p, paid: !p.paid } : p,
+        ),
+      },
+    };
+  });
+  write(BOOKINGS_KEY, next);
+}
+
+export function getFollows(): string[] { return read<string[]>(FOLLOWS_KEY, []); }
+export function toggleFollow(hostSlug: string) {
+  const cur = getFollows();
+  write(FOLLOWS_KEY, cur.includes(hostSlug) ? cur.filter((x) => x !== hostSlug) : [...cur, hostSlug]);
+}
+export function isFollowing(hostSlug: string) { return getFollows().includes(hostSlug); }
 
 export function useStore<T>(selector: () => T): T {
   const [, setTick] = useState(0);

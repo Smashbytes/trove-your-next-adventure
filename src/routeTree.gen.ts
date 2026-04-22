@@ -15,6 +15,7 @@ import { Route as SavedRouteImport } from './routes/saved'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpotIdRouteImport } from './routes/spot.$id'
+import { Route as HostSlugRouteImport } from './routes/host.$slug'
 import { Route as BookingIdRouteImport } from './routes/booking.$id'
 
 const TicketsRoute = TicketsRouteImport.update({
@@ -47,6 +48,11 @@ const SpotIdRoute = SpotIdRouteImport.update({
   path: '/spot/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HostSlugRoute = HostSlugRouteImport.update({
+  id: '/host/$slug',
+  path: '/host/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BookingIdRoute = BookingIdRouteImport.update({
   id: '/booking/$id',
   path: '/booking/$id',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
+  '/host/$slug': typeof HostSlugRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
+  '/host/$slug': typeof HostSlugRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
+  '/host/$slug': typeof HostSlugRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/tickets'
     | '/booking/$id'
+    | '/host/$slug'
     | '/spot/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/tickets'
     | '/booking/$id'
+    | '/host/$slug'
     | '/spot/$id'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/tickets'
     | '/booking/$id'
+    | '/host/$slug'
     | '/spot/$id'
   fileRoutesById: FileRoutesById
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   TicketsRoute: typeof TicketsRoute
   BookingIdRoute: typeof BookingIdRoute
+  HostSlugRoute: typeof HostSlugRoute
   SpotIdRoute: typeof SpotIdRoute
 }
 
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpotIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/host/$slug': {
+      id: '/host/$slug'
+      path: '/host/$slug'
+      fullPath: '/host/$slug'
+      preLoaderRoute: typeof HostSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/booking/$id': {
       id: '/booking/$id'
       path: '/booking/$id'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   TicketsRoute: TicketsRoute,
   BookingIdRoute: BookingIdRoute,
+  HostSlugRoute: HostSlugRoute,
   SpotIdRoute: SpotIdRoute,
 }
 export const routeTree = rootRouteImport

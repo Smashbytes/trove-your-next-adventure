@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
-import { motion } from "framer-motion";
-import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Users, Send } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check } from "lucide-react";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
-import { formatDate, formatPrice, formatTime, getSpot } from "@/lib/spots";
-import { addBooking, getSaved, isSaved, toggleSaved, useStore } from "@/lib/store";
-import { useState } from "react";
+import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
+import { addBooking, getSaved, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
+import { useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
   head: ({ params }) => {
@@ -21,14 +21,40 @@ function SpotPage() {
   const spot = getSpot(id);
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [pickedFriends, setPickedFriends] = useState<string[]>([]);
   const saved = useStore(() => getSaved()).includes(id);
+
+  const total = spot ? spot.price * qty : 0;
+  const splitCount = pickedFriends.length + 1; // include me
+  const perPerson = useMemo(() => Math.ceil(total / splitCount), [total, splitCount]);
 
   if (!spot) return <div className="p-10 text-center">Spot not found.</div>;
 
   function book() {
     if (!spot) return;
-    const b = addBooking({ spotId: spot.id, qty, total: spot.price * qty });
+    let split: { participants: SplitParticipant[]; perPerson: number } | undefined;
+    if (pickedFriends.length > 0) {
+      const participants: SplitParticipant[] = [
+        { friendId: "me", name: "You", initial: "Y", hue: 320, paid: true },
+        ...spot.friendsGoing
+          .filter((f) => pickedFriends.includes(f.id))
+          .map((f) => ({
+            friendId: f.id,
+            name: f.name,
+            initial: f.initial,
+            hue: f.hue,
+            paid: false,
+          })),
+      ];
+      split = { participants, perPerson };
+    }
+    const b = addBooking({ spotId: spot.id, qty, total, split });
     navigate({ to: "/booking/$id", params: { id: b.id } });
+  }
+
+  function toggleFriend(fid: string) {
+    setPickedFriends((cur) => (cur.includes(fid) ? cur.filter((x) => x !== fid) : [...cur, fid]));
   }
 
   return (
@@ -124,12 +150,123 @@ function SpotPage() {
             <p className="text-[10px] uppercase text-muted-foreground">Hours</p>
             <p className="mt-1">{spot.hours}</p>
           </div>
-          <div className="rounded-xl bg-surface ring-1 ring-border p-3">
+          <Link
+            to="/host/$slug"
+            params={{ slug: hostSlug(spot.hostName) }}
+            className="rounded-xl bg-surface ring-1 ring-border p-3 transition active:scale-[0.98] hover:ring-primary/40"
+          >
             <p className="text-[10px] uppercase text-muted-foreground">Hosted by</p>
-            <p className="mt-1">{spot.hostName}</p>
-          </div>
+            <p className="mt-1 inline-flex items-center gap-1 text-primary">
+              {spot.hostName} <span className="text-xs">›</span>
+            </p>
+          </Link>
         </section>
+
+        {/* Split bill toggle */}
+        {spot.friendsGoing.length > 0 && (
+          <section className="rounded-2xl bg-surface ring-1 ring-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-brand shadow-glow-soft">
+                  <Users2 className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm">Split the bill</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {pickedFriends.length > 0
+                      ? `Splitting with ${pickedFriends.length} · ${formatPrice(perPerson)} each`
+                      : "Share the cost with your crew"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSplitOpen(true)}
+                className="shrink-0 rounded-full bg-foreground/10 px-3.5 py-2 text-xs font-semibold"
+              >
+                {pickedFriends.length > 0 ? "Edit" : "Split"}
+              </button>
+            </div>
+          </section>
+        )}
       </main>
+
+      {/* Split bill modal */}
+      <AnimatePresence>
+        {splitOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end justify-center"
+            onClick={() => setSplitOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 400 }} animate={{ y: 0 }} exit={{ y: 400 }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-t-3xl bg-surface ring-1 ring-border p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display text-xl">Split the bill</h3>
+                  <p className="text-xs text-muted-foreground">Pick who's chipping in</p>
+                </div>
+                <button onClick={() => setSplitOpen(false)} className="grid h-9 w-9 place-items-center rounded-full bg-surface-elevated">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Per-person preview */}
+              <div className="rounded-2xl bg-gradient-soft p-4 ring-1 ring-primary/30 text-center">
+                <p className="text-[10px] uppercase tracking-wider text-primary">Per person</p>
+                <p className="mt-1 font-display text-3xl text-gradient">{formatPrice(perPerson)}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {formatPrice(total)} ÷ {splitCount} {splitCount === 1 ? "person" : "people"}
+                </p>
+              </div>
+
+              {/* Friend picker */}
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                {spot.friendsGoing.map((f) => {
+                  const picked = pickedFriends.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => toggleFriend(f.id)}
+                      className={`w-full flex items-center gap-3 rounded-2xl p-3 ring-1 transition ${
+                        picked ? "bg-primary/10 ring-primary/40" : "bg-surface-elevated ring-border"
+                      }`}
+                    >
+                      <div
+                        className="grid h-10 w-10 place-items-center rounded-full font-display text-sm text-white"
+                        style={{ background: `oklch(0.65 0.22 ${f.hue})` }}
+                      >
+                        {f.initial}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-semibold">{f.name}</p>
+                        <p className="text-[11px] text-muted-foreground">Friend</p>
+                      </div>
+                      <div
+                        className={`grid h-6 w-6 place-items-center rounded-full transition ${
+                          picked ? "bg-gradient-brand" : "bg-background ring-1 ring-border"
+                        }`}
+                      >
+                        {picked && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setSplitOpen(false)}
+                className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+              >
+                Confirm split
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Sticky book bar */}
       <div className="fixed inset-x-0 bottom-0 z-40 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
@@ -144,8 +281,12 @@ function SpotPage() {
               <button onClick={() => setQty(Math.min(10, qty + 1))} className="h-9 w-9 text-lg">+</button>
             </div>
             <div className="flex-1">
-              <div className="text-[10px] text-muted-foreground">Total</div>
-              <div className="font-display text-lg text-gradient">{formatPrice(spot.price * qty)}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {pickedFriends.length > 0 ? `Your share` : "Total"}
+              </div>
+              <div className="font-display text-lg text-gradient">
+                {formatPrice(pickedFriends.length > 0 ? perPerson : total)}
+              </div>
             </div>
             <button
               onClick={book}
