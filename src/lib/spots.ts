@@ -247,7 +247,7 @@ export function getHosts(): Host[] {
         city: s.city,
         area: s.area,
         events: [s],
-        followers: 200 + Math.floor(Math.random() * 4800),
+        followers: 200 + ((slug.length * 137) % 4800),
         bio: hostBios[s.hostName] ?? "Booking the best nights in town.",
       });
     }
