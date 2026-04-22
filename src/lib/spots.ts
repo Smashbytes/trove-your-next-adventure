@@ -210,6 +210,55 @@ export function getSpot(id: string) {
   return spots.find((s) => s.id === id);
 }
 
+export function hostSlug(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+export interface Host {
+  slug: string;
+  name: string;
+  city: Spot["city"];
+  area: string;
+  events: Spot[];
+  followers: number;
+  bio: string;
+}
+
+const hostBios: Record<string, string> = {
+  "Neon Underground": "Joburg's home of warehouse techno since 2019. No phones. No ego. Just bass.",
+  "The Rooftop": "Sandton's sundown destination. Live sax, deep house, cocktails above the city.",
+  "Cellar Door Comedy": "Cape Town's loudest open mic. Five comics, one mic, every Saturday.",
+  "SkyHigh ZA": "Certified pilots. Tandem flights over the Magaliesberg. Adrenaline guaranteed.",
+  "Studio Twenty Two": "Sip & paint nights for creatives, daters and chaos coordinators.",
+  "Club Vega": "Three rooms, three sounds, one Durban institution.",
+};
+
+export function getHosts(): Host[] {
+  const map = new Map<string, Host>();
+  for (const s of spots) {
+    const slug = hostSlug(s.hostName);
+    const existing = map.get(slug);
+    if (existing) {
+      existing.events.push(s);
+    } else {
+      map.set(slug, {
+        slug,
+        name: s.hostName,
+        city: s.city,
+        area: s.area,
+        events: [s],
+        followers: 200 + Math.floor(Math.random() * 4800),
+        bio: hostBios[s.hostName] ?? "Booking the best nights in town.",
+      });
+    }
+  }
+  return [...map.values()];
+}
+
+export function getHost(slug: string): Host | undefined {
+  return getHosts().find((h) => h.slug === slug);
+}
+
 export function formatPrice(n: number) {
   return `R${n.toLocaleString("en-ZA")}`;
 }
