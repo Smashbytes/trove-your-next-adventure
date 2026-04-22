@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 
 const SAVED_KEY = "trove:saved";
 const BOOKINGS_KEY = "trove:bookings";
+const FOLLOWS_KEY = "trove:follows";
+
+export interface SplitParticipant {
+  friendId: string;
+  name: string;
+  initial: string;
+  hue: number;
+  paid: boolean;
+}
 
 export interface Booking {
   id: string;
@@ -11,6 +20,10 @@ export interface Booking {
   total: number;
   createdAt: string;
   ticketCode: string;
+  split?: {
+    participants: SplitParticipant[];
+    perPerson: number;
+  };
 }
 
 type Listener = () => void;
