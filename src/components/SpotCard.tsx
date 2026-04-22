@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { MapPin, Star, Clock, ArrowUpRight, Ticket } from "lucide-react";
 import { CapacityPill } from "./CapacityBar";
-import { formatDate, formatTime, formatPrice, type Spot } from "@/lib/spots";
+import { formatDate, formatTime, formatPrice, hostSlug, type Spot } from "@/lib/spots";
 
 export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
   return (
@@ -72,21 +72,27 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
 
       {/* Footer — host + price CTA */}
       <footer className="flex items-center justify-between gap-3 px-3.5 py-3">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <Link
+          to="/host/$slug"
+          params={{ slug: hostSlug(spot.hostName) }}
+          className="flex items-center gap-2.5 min-w-0 group/host"
+        >
           <div className="rounded-full p-[1.5px] bg-gradient-brand">
             <div className="h-8 w-8 rounded-full bg-background grid place-items-center font-display text-[11px]">
               {spot.hostName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </div>
           </div>
           <div className="leading-tight min-w-0">
-            <p className="text-[12px] font-semibold truncate">{spot.hostName}</p>
+            <p className="text-[12px] font-semibold truncate group-hover/host:text-primary transition">
+              {spot.hostName}
+            </p>
             <p className="text-[10px] text-muted-foreground truncate">
               {spot.friendsGoing.length > 0
                 ? `${spot.friendsGoing.length} from your community going`
                 : `${spot.reviews} reviews`}
             </p>
           </div>
-        </div>
+        </Link>
         <Link
           to="/spot/$id"
           params={{ id: spot.id }}
