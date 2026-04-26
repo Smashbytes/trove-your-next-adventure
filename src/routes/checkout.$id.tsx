@@ -61,9 +61,9 @@ function CheckoutPage() {
     (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3);
 
   function processPayment() {
+    if (!spot || !intent) return;
     setErrorMsg(null);
     setStep("processing");
-    // Mock gateway: succeed unless card ends in 0000 (test failure card)
     const last4 = cardNumber.replace(/\s/g, "").slice(-4);
     const willFail = method === "card" && last4 === "0000";
     setTimeout(() => {
@@ -74,9 +74,9 @@ function CheckoutPage() {
       }
       const booking = addBooking({
         spotId: spot.id,
-        qty: intent!.qty,
-        total: intent!.total,
-        split: intent!.split,
+        qty: intent.qty,
+        total: intent.total,
+        split: intent.split,
         status: "confirmed",
         buyer: { name, email, phone },
         paymentMethod: method,
