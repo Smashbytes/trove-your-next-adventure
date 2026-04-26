@@ -37,6 +37,9 @@ export interface Spot {
   friendsGoing: Friend[];
   hours: string;
   hostName: string;
+  address: string;
+  lat: number;
+  lng: number;
 }
 
 const friends: Friend[] = [
@@ -71,6 +74,8 @@ export const spots: Spot[] = [
     friendsGoing: [friends[0], friends[1], friends[2]],
     hours: "Tue 21:00 — 04:00",
     hostName: "Neon Underground",
+    address: "12 De Beer St, Braamfontein, Johannesburg",
+    lat: -26.1925, lng: 28.0337,
   },
   {
     id: "sunset-sessions",
@@ -94,6 +99,8 @@ export const spots: Spot[] = [
     friendsGoing: [friends[3], friends[4]],
     hours: "Sat 17:00 — 23:00",
     hostName: "The Rooftop",
+    address: "Nelson Mandela Sq, Sandton, Johannesburg",
+    lat: -26.1076, lng: 28.0567,
   },
   {
     id: "open-mic-saturday",
@@ -117,6 +124,8 @@ export const spots: Spot[] = [
     friendsGoing: [friends[5]],
     hours: "Sat 19:30 — 22:30",
     hostName: "Cellar Door Comedy",
+    address: "Lower Main Rd, Observatory, Cape Town",
+    lat: -33.9376, lng: 18.4731,
   },
   {
     id: "magaliesberg-paraglide",
@@ -140,6 +149,8 @@ export const spots: Spot[] = [
     friendsGoing: [],
     hours: "Daily 07:00 — 16:00",
     hostName: "SkyHigh ZA",
+    address: "Magaliesberg Cliffs, North West",
+    lat: -25.9833, lng: 27.5500,
   },
   {
     id: "sip-and-paint",
@@ -163,6 +174,8 @@ export const spots: Spot[] = [
     friendsGoing: [friends[1], friends[3]],
     hours: "Wed/Fri 18:30 — 21:00",
     hostName: "Studio Twenty Two",
+    address: "Main Rd, Sea Point, Cape Town",
+    lat: -33.9197, lng: 18.3850,
   },
   {
     id: "neon-friday",
@@ -186,6 +199,8 @@ export const spots: Spot[] = [
     friendsGoing: [friends[0], friends[4], friends[5]],
     hours: "Fri 22:00 — 04:00",
     hostName: "Club Vega",
+    address: "Florida Rd, Morningside, Durban",
+    lat: -29.8333, lng: 31.0167,
   },
 ];
 

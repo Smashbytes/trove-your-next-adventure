@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check } from "lucide-react";
+import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check, Navigation } from "lucide-react";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
+import { SpotMap } from "@/components/SpotMap";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
-import { addBooking, getSaved, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
+import { getSaved, setCheckoutIntent, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
 import { useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
@@ -49,8 +50,8 @@ function SpotPage() {
       ];
       split = { participants, perPerson };
     }
-    const b = addBooking({ spotId: spot.id, qty, total, split });
-    navigate({ to: "/booking/$id", params: { id: b.id } });
+    setCheckoutIntent({ spotId: spot.id, qty, total, split });
+    navigate({ to: "/checkout/$id", params: { id: spot.id } });
   }
 
   function toggleFriend(fid: string) {
@@ -160,6 +161,31 @@ function SpotPage() {
               {spot.hostName} <span className="text-xs">›</span>
             </p>
           </Link>
+        </section>
+
+        {/* Map */}
+        <section>
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <h2 className="font-display text-xl inline-flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" /> Where it's at
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">{spot.address}</p>
+            </div>
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${spot.lat}&mlon=${spot.lng}#map=17/${spot.lat}/${spot.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-[11px] font-semibold"
+            >
+              <Navigation className="h-3 w-3" /> Directions
+            </a>
+          </div>
+          <SpotMap
+            points={[{ lat: spot.lat, lng: spot.lng, label: spot.name, sublabel: spot.area }]}
+            height={220}
+            zoom={15}
+          />
         </section>
 
         {/* Split bill toggle */}
