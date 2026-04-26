@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar } from "lucide-react";
 import { getHost, formatDate, formatTime, formatPrice } from "@/lib/spots";
 import { toggleFollow, useStore, getFollows } from "@/lib/store";
+import { SpotMap } from "@/components/SpotMap";
 
 export const Route = createFileRoute("/host/$slug")({
   head: ({ params }) => {
@@ -138,6 +139,23 @@ function HostPage() {
               </motion.div>
             ))}
           </div>
+        </section>
+
+        {/* Map of host's events */}
+        <section>
+          <h2 className="font-display text-xl mb-3 inline-flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-primary" /> On the map
+          </h2>
+          <SpotMap
+            points={host.events.map((e) => ({
+              lat: e.lat,
+              lng: e.lng,
+              label: e.name,
+              sublabel: `${e.area} · ${formatDate(e.date)}`,
+            }))}
+            height={240}
+            zoom={13}
+          />
         </section>
       </main>
     </div>
