@@ -110,11 +110,19 @@ function BookingPage() {
             <div className="border-t border-dashed border-border" />
           </div>
 
-          <div className="mx-auto w-fit rounded-2xl bg-white p-4">
+          <div className={`mx-auto w-fit rounded-2xl bg-white p-4 transition ${!isActive ? "grayscale opacity-50" : ""}`}>
             <QRCodeSVG value={`TROVE:${booking.ticketCode}`} size={160} bgColor="#ffffff" fgColor="#0a0612" level="H" />
           </div>
           <p className="mt-3 text-center font-mono text-xs tracking-widest text-muted-foreground">{booking.ticketCode}</p>
-          <p className="mt-1 text-center text-[11px] text-muted-foreground">Show at entry · Total {formatPrice(booking.total)}</p>
+          <p className="mt-1 text-center text-[11px] text-muted-foreground">
+            {isActive ? `Show at entry · Total ${formatPrice(booking.total)}` :
+              isRefundPending ? "Ticket invalidated · Refund processing" : "Ticket cancelled"}
+          </p>
+          {booking.paymentRef && (
+            <p className="mt-1 text-center text-[10px] text-muted-foreground/60 font-mono">
+              Ref · {booking.paymentRef}
+            </p>
+          )}
         </div>
       </motion.div>
 
@@ -198,9 +206,58 @@ function BookingPage() {
         </motion.section>
       )}
 
-      <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-success/15 py-3 text-sm font-semibold text-success">
-        <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp
-      </button>
+      {/* Actions */}
+      {isActive && (
+        <div className="mt-6 space-y-2">
+          <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-success/15 py-3 text-sm font-semibold text-success">
+            <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp
+          </button>
+          {!confirmCancel ? (
+            <button
+              onClick={() => setConfirmCancel(true)}
+              className="w-full rounded-full bg-surface ring-1 ring-border py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:ring-destructive/40 transition"
+            >
+              Cancel booking
+            </button>
+          ) : (
+            <div className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/40 p-4 space-y-2">
+              <p className="text-sm font-semibold">Cancel this booking?</p>
+              <p className="text-[11px] text-muted-foreground">
+                {formatPrice(booking.total)} will be refunded to your original payment method.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmCancel(false)}
+                  className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold"
+                >
+                  Keep it
+                </button>
+                <button
+                  onClick={() => { cancelBooking(booking.id); setConfirmCancel(false); }}
+                  className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground"
+                >
+                  Confirm cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isRefundPending && (
+        <div className="mt-6 rounded-2xl bg-warning/10 ring-1 ring-warning/40 p-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            Refund of <span className="font-semibold text-foreground">{formatPrice(booking.total)}</span> is processing…
+          </p>
+        </div>
+      )}
+
+      <Link
+        to="/tickets"
+        className="mt-4 block text-center text-xs text-muted-foreground hover:text-foreground"
+      >
+        Back to all tickets →
+      </Link>
     </div>
   );
 }
