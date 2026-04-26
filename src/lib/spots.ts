@@ -37,6 +37,9 @@ export interface Spot {
   friendsGoing: Friend[];
   hours: string;
   hostName: string;
+  address: string;
+  lat: number;
+  lng: number;
 }
 
 const friends: Friend[] = [
