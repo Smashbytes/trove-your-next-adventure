@@ -163,6 +163,31 @@ function SpotPage() {
           </Link>
         </section>
 
+        {/* Map */}
+        <section>
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <h2 className="font-display text-xl inline-flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" /> Where it's at
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">{spot.address}</p>
+            </div>
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${spot.lat}&mlon=${spot.lng}#map=17/${spot.lat}/${spot.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-[11px] font-semibold"
+            >
+              <Navigation className="h-3 w-3" /> Directions
+            </a>
+          </div>
+          <SpotMap
+            points={[{ lat: spot.lat, lng: spot.lng, label: spot.name, sublabel: spot.area }]}
+            height={220}
+            zoom={15}
+          />
+        </section>
+
         {/* Split bill toggle */}
         {spot.friendsGoing.length > 0 && (
           <section className="rounded-2xl bg-surface ring-1 ring-border p-4">
