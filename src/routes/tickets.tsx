@@ -64,15 +64,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function BookingRow({ bookingId, spotId, qty, total, dim }: { bookingId: string; spotId: string; qty: number; total: number; ticketCode: string; dim?: boolean }) {
   const spot = getSpot(spotId);
-  if (!spot) return null;
+  const bookings = useStore(() => getBookings());
+  const booking = bookings.find((b) => b.id === bookingId);
+  if (!spot || !booking) return null;
+  const cancelled = booking.status === "cancelled" || booking.status === "refunded";
+  const refundPending = booking.status === "refund_pending";
   return (
     <Link
       to="/booking/$id" params={{ id: bookingId }}
-      className={`flex items-center gap-3 rounded-2xl bg-surface ring-1 ring-border p-3 transition hover:ring-primary/40 ${dim ? "opacity-60" : ""}`}
+      className={`flex items-center gap-3 rounded-2xl bg-surface ring-1 ring-border p-3 transition hover:ring-primary/40 ${dim || cancelled ? "opacity-60" : ""}`}
     >
-      <img src={spot.image} alt={spot.name} className="h-16 w-16 rounded-xl object-cover" loading="lazy" />
+      <img src={spot.image} alt={spot.name} className={`h-16 w-16 rounded-xl object-cover ${cancelled ? "grayscale" : ""}`} loading="lazy" />
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-[10px] uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
+          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">Refunded</span>}
+          {refundPending && <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-warning">Refund pending</span>}
+        </div>
         <p className="font-display text-base truncate">{spot.name}</p>
         <p className="text-xs text-muted-foreground">{qty} × · {formatPrice(total)}</p>
       </div>
