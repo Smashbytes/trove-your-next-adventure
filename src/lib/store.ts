@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 const SAVED_KEY = "trove:saved";
 const BOOKINGS_KEY = "trove:bookings";
 const FOLLOWS_KEY = "trove:follows";
+const CHECKOUT_KEY = "trove:checkout";
 
 export interface SplitParticipant {
   friendId: string;
@@ -13,6 +14,8 @@ export interface SplitParticipant {
   paid: boolean;
 }
 
+export type BookingStatus = "confirmed" | "cancelled" | "refund_pending" | "refunded";
+
 export interface Booking {
   id: string;
   spotId: string;
@@ -20,10 +23,21 @@ export interface Booking {
   total: number;
   createdAt: string;
   ticketCode: string;
+  status: BookingStatus;
+  buyer: { name: string; email: string; phone: string };
+  paymentMethod: "card" | "eft" | "wallet";
+  paymentRef: string;
   split?: {
     participants: SplitParticipant[];
     perPerson: number;
   };
+}
+
+export interface CheckoutIntent {
+  spotId: string;
+  qty: number;
+  total: number;
+  split?: { participants: SplitParticipant[]; perPerson: number };
 }
 
 type Listener = () => void;
