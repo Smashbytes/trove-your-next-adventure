@@ -94,7 +94,7 @@ export function SpotMap({ points, height = 220, zoom = 14, className = "" }: Spo
   return (
     <div
       ref={containerRef}
-      className={`w-full overflow-hidden rounded-2xl ring-1 ring-border ${className}`}
+      className={`trove-map-shell w-full overflow-hidden rounded-2xl ring-1 ring-border ${className}`}
       style={{ height, background: "oklch(0.09 0.006 300)" }}
     />
   );

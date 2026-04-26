@@ -174,4 +174,18 @@
     to { transform: translateX(-50%); }
   }
   .animate-marquee { animation: marquee 30s linear infinite; }
+
+  /* Keep Leaflet contained — its panes default to z-index 400+ which fights
+     sticky bars, modals and the bottom nav. Isolate the stacking context. */
+  .trove-map-shell {
+    position: relative;
+    isolation: isolate;
+    z-index: 0;
+  }
+  .trove-map-shell .leaflet-pane,
+  .trove-map-shell .leaflet-top,
+  .trove-map-shell .leaflet-bottom,
+  .trove-map-shell .leaflet-control { z-index: 1 !important; }
+  .trove-map-shell .leaflet-popup { z-index: 2 !important; }
+  .leaflet-container { background: oklch(0.09 0.006 300) !important; }
 }

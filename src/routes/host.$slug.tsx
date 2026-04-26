@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar } from "lucide-react";
+import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Clock, Phone, Mail, Instagram, Sparkles, Award, CheckCircle2, Navigation } from "lucide-react";
 import { getHost, formatDate, formatTime, formatPrice } from "@/lib/spots";
 import { toggleFollow, useStore, getFollows } from "@/lib/store";
 import { SpotMap } from "@/components/SpotMap";
@@ -73,11 +73,23 @@ function HostPage() {
         {/* Bio */}
         <p className="text-sm text-muted-foreground leading-relaxed">{host.bio}</p>
 
+        {/* Specialties chips */}
+        {host.specialties.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {host.specialties.map((s) => (
+              <span key={s} className="rounded-full bg-primary/10 ring-1 ring-primary/30 px-2.5 py-1 text-[11px] text-primary">
+                {s}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Stats */}
-        <section className="grid grid-cols-3 gap-2 text-center">
+        <section className="grid grid-cols-4 gap-2 text-center">
           <Stat label="Events" value={host.events.length} />
           <Stat label="Followers" value={followerCount.toLocaleString("en-ZA")} />
-          <Stat label="City" value={host.city} />
+          <Stat label="Since" value={host.founded} />
+          <Stat label="Price" value={host.priceRange.split(" ")[0]} />
         </section>
 
         {/* Actions */}
@@ -96,6 +108,56 @@ function HostPage() {
             <Users className="h-4 w-4" /> Invite
           </button>
         </div>
+
+        {/* Highlights */}
+        {host.highlights.length > 0 && (
+          <section className="rounded-2xl bg-gradient-soft ring-1 ring-primary/30 p-4">
+            <h3 className="font-display text-sm inline-flex items-center gap-2 text-primary">
+              <Sparkles className="h-4 w-4" /> Good to know
+            </h3>
+            <ul className="mt-2 space-y-1.5">
+              {host.highlights.map((h) => (
+                <li key={h} className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-accent shrink-0" />
+                  <span>{h}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Opening hours + Amenities */}
+        <section className="grid grid-cols-2 gap-3">
+          {host.openingHours.length > 0 && (
+            <div className="rounded-2xl bg-surface ring-1 ring-border p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
+                <Clock className="h-3 w-3" /> Hours
+              </p>
+              <ul className="mt-2 space-y-1">
+                {host.openingHours.map((h) => (
+                  <li key={h.day} className="text-[11px] flex justify-between gap-2">
+                    <span className="text-muted-foreground">{h.day}</span>
+                    <span className="font-medium text-foreground/90 text-right">{h.hours}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {host.amenities.length > 0 && (
+            <div className="rounded-2xl bg-surface ring-1 ring-border p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
+                <Award className="h-3 w-3" /> Amenities
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {host.amenities.map((a) => (
+                  <span key={a} className="rounded-md bg-surface-elevated px-1.5 py-0.5 text-[10px] text-foreground/80">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Posts / Events */}
         <section>
@@ -157,6 +219,39 @@ function HostPage() {
             zoom={13}
           />
         </section>
+
+        {/* Contact */}
+        {(host.contact.phone || host.contact.email || host.contact.instagram) && (
+          <section className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-2">
+            <h3 className="font-display text-sm text-foreground/90 mb-1">Get in touch</h3>
+            {host.contact.phone && (
+              <a href={`tel:${host.contact.phone.replace(/\s/g, "")}`} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 text-primary" /> Phone</span>
+                <span className="text-xs font-medium">{host.contact.phone}</span>
+              </a>
+            )}
+            {host.contact.email && (
+              <a href={`mailto:${host.contact.email}`} className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 text-primary" /> Email</span>
+                <span className="text-xs font-medium truncate">{host.contact.email}</span>
+              </a>
+            )}
+            {host.contact.instagram && (
+              <a href={`https://instagram.com/${host.contact.instagram.replace("@", "")}`} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Instagram className="h-3.5 w-3.5 text-primary" /> Instagram</span>
+                <span className="text-xs font-medium">{host.contact.instagram}</span>
+              </a>
+            )}
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${host.events[0].lat}&mlon=${host.events[0].lng}#map=15/${host.events[0].lat}/${host.events[0].lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-foreground/10 py-2 text-[11px] font-semibold"
+            >
+              <Navigation className="h-3 w-3" /> Get directions
+            </a>
+          </section>
+        )}
       </main>
     </div>
   );
