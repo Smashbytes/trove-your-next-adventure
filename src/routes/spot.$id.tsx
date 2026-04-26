@@ -5,7 +5,7 @@ import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
 import { SpotMap } from "@/components/SpotMap";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
-import { addBooking, getSaved, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
+import { getSaved, setCheckoutIntent, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
 import { useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
@@ -50,8 +50,8 @@ function SpotPage() {
       ];
       split = { participants, perPerson };
     }
-    const b = addBooking({ spotId: spot.id, qty, total, split });
-    navigate({ to: "/booking/$id", params: { id: b.id } });
+    setCheckoutIntent({ spotId: spot.id, qty, total, split });
+    navigate({ to: "/checkout/$id", params: { id: spot.id } });
   }
 
   function toggleFriend(fid: string) {
