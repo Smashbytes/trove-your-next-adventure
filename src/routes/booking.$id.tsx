@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send } from "lucide-react";
-import { getBooking, markSplitPaid, useStore } from "@/lib/store";
+import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw } from "lucide-react";
+import { cancelBooking, getBooking, markSplitPaid, useStore } from "@/lib/store";
 import { formatDate, formatPrice, formatTime, getSpot } from "@/lib/spots";
+import { useState } from "react";
 
 export const Route = createFileRoute("/booking/$id")({
   head: () => ({ meta: [{ title: "Your Ticket — TROVE" }] }),
