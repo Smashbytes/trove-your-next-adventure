@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check } from "lucide-react";
+import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check, Navigation } from "lucide-react";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
+import { SpotMap } from "@/components/SpotMap";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
 import { addBooking, getSaved, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
 import { useState, useMemo } from "react";
