@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar } from "lucide-react";
+import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Clock, Phone, Mail, Instagram, Sparkles, Award, CheckCircle2, Navigation } from "lucide-react";
 import { getHost, formatDate, formatTime, formatPrice } from "@/lib/spots";
 import { toggleFollow, useStore, getFollows } from "@/lib/store";
 import { SpotMap } from "@/components/SpotMap";
