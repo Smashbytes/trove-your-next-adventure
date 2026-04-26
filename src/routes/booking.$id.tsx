@@ -15,6 +15,7 @@ function BookingPage() {
   const { id } = useParams({ from: "/booking/$id" });
   const booking = useStore(() => getBooking(id));
   const spot = booking ? getSpot(booking.spotId) : null;
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   if (!booking || !spot) {
     return (
@@ -29,6 +30,10 @@ function BookingPage() {
   const collected = split ? paidCount * split.perPerson : 0;
   const progress = split ? (paidCount / split.participants.length) * 100 : 0;
 
+  const isCancelled = booking.status === "cancelled" || booking.status === "refunded";
+  const isRefundPending = booking.status === "refund_pending";
+  const isActive = booking.status === "confirmed";
+
   return (
     <div className="mx-auto min-h-screen max-w-md p-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-12">
       <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -39,11 +44,35 @@ function BookingPage() {
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="mt-6 text-center"
       >
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/15">
-          <CheckCircle2 className="h-8 w-8 text-success" />
-        </div>
-        <h1 className="mt-4 font-display text-3xl">You're in.</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Confirmation sent via WhatsApp</p>
+        {isActive ? (
+          <>
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/15">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <h1 className="mt-4 font-display text-3xl">You're in.</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Confirmation sent to {booking.buyer?.email ?? "your email"}
+            </p>
+          </>
+        ) : isRefundPending ? (
+          <>
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-warning/15">
+              <RotateCcw className="h-8 w-8 text-warning" />
+            </div>
+            <h1 className="mt-4 font-display text-3xl">Refund pending</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatPrice(booking.total)} will return to your card in 1–3 days.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-destructive/15">
+              <XCircle className="h-8 w-8 text-destructive" />
+            </div>
+            <h1 className="mt-4 font-display text-3xl">Cancelled</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Refund of {formatPrice(booking.total)} processed.</p>
+          </>
+        )}
       </motion.div>
 
       {/* Ticket */}
