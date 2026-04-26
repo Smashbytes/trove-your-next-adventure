@@ -237,15 +237,95 @@ export interface Host {
   events: Spot[];
   followers: number;
   bio: string;
+  founded: string;
+  priceRange: string;
+  specialties: string[];
+  amenities: string[];
+  openingHours: { day: string; hours: string }[];
+  contact: { phone: string; email: string; instagram: string };
+  highlights: string[];
 }
 
-const hostBios: Record<string, string> = {
-  "Neon Underground": "Joburg's home of warehouse techno since 2019. No phones. No ego. Just bass.",
-  "The Rooftop": "Sandton's sundown destination. Live sax, deep house, cocktails above the city.",
-  "Cellar Door Comedy": "Cape Town's loudest open mic. Five comics, one mic, every Saturday.",
-  "SkyHigh ZA": "Certified pilots. Tandem flights over the Magaliesberg. Adrenaline guaranteed.",
-  "Studio Twenty Two": "Sip & paint nights for creatives, daters and chaos coordinators.",
-  "Club Vega": "Three rooms, three sounds, one Durban institution.",
+const hostMeta: Record<string, Omit<Host, "slug" | "name" | "city" | "area" | "events" | "followers">> = {
+  "Neon Underground": {
+    bio: "Joburg's home of warehouse techno since 2019. No phones. No ego. Just bass that rearranges your insides until sunrise.",
+    founded: "2019",
+    priceRange: "R120 — R220",
+    specialties: ["Warehouse Techno", "Resident DJs", "All-Nighters"],
+    amenities: ["Cloakroom", "Smoking Patio", "ATM", "Late-night Food"],
+    openingHours: [
+      { day: "Tue", hours: "21:00 — 04:00" },
+      { day: "Fri — Sat", hours: "22:00 — 06:00" },
+    ],
+    contact: { phone: "+27 11 403 0001", email: "doors@neonunderground.za", instagram: "@neon.underground.jhb" },
+    highlights: ["Strict no-phones-on-floor policy", "Renowned international guest residencies", "Sound by Funktion-One"],
+  },
+  "The Rooftop": {
+    bio: "Sandton's sundown destination. Live sax over deep house, signature cocktails and a 360° skyline that hits different at golden hour.",
+    founded: "2017",
+    priceRange: "R180 — R350",
+    specialties: ["Sunset Sessions", "Deep House", "Cocktail Bar"],
+    amenities: ["Cocktail Bar", "Tapas Kitchen", "Heated Lounge", "Valet"],
+    openingHours: [
+      { day: "Wed — Thu", hours: "16:00 — 23:00" },
+      { day: "Fri — Sat", hours: "16:00 — 02:00" },
+      { day: "Sun", hours: "14:00 — 22:00" },
+    ],
+    contact: { phone: "+27 11 217 4400", email: "hello@therooftop.co.za", instagram: "@therooftop.sandton" },
+    highlights: ["Smart dress code enforced", "Reservations recommended Fri/Sat", "Live saxophonist every Sunday"],
+  },
+  "Cellar Door Comedy": {
+    bio: "Cape Town's loudest open mic. Five comics, one mic, every Saturday — plus mid-week showcases from the country's sharpest headliners.",
+    founded: "2015",
+    priceRange: "R60 — R150",
+    specialties: ["Open Mic", "Stand-up", "Comedy Showcases"],
+    amenities: ["Full Bar", "Pizza Kitchen", "Wheelchair Access"],
+    openingHours: [
+      { day: "Wed", hours: "19:00 — 23:00" },
+      { day: "Fri — Sat", hours: "18:00 — 00:00" },
+    ],
+    contact: { phone: "+27 21 447 1166", email: "book@cellardoor.co.za", instagram: "@cellardoorcomedy" },
+    highlights: ["Audience members may be roasted on sight", "BYO thick skin", "First-timer slot every Saturday"],
+  },
+  "SkyHigh ZA": {
+    bio: "Certified tandem pilots flying the Magaliesberg cliffs since 2012. 25-minute flights, full safety brief, GoPro footage included.",
+    founded: "2012",
+    priceRange: "R1 200 — R2 800",
+    specialties: ["Tandem Paragliding", "Pilot Training", "GoPro Footage"],
+    amenities: ["Free Parking", "Gear Provided", "Pickup from JHB"],
+    openingHours: [
+      { day: "Daily", hours: "07:00 — 16:00" },
+    ],
+    contact: { phone: "+27 82 555 0114", email: "fly@skyhigh.za", instagram: "@skyhigh.za" },
+    highlights: ["SAHPA-certified pilots", "Weather-dependent — rebooking is free", "Min weight 35kg, max 110kg"],
+  },
+  "Studio Twenty Two": {
+    bio: "Sip & paint nights for creatives, daters and chaos coordinators. All materials supplied — talent very much optional.",
+    founded: "2020",
+    priceRange: "R250 — R420",
+    specialties: ["Sip & Paint", "Private Bookings", "Date Nights"],
+    amenities: ["All Materials Provided", "Wine Bar", "Aprons Supplied"],
+    openingHours: [
+      { day: "Wed", hours: "18:30 — 21:00" },
+      { day: "Fri", hours: "18:30 — 21:30" },
+      { day: "Sat", hours: "11:00 — 14:00, 18:30 — 21:30" },
+    ],
+    contact: { phone: "+27 21 433 2200", email: "hi@studio22.co.za", instagram: "@studiotwentytwo.cpt" },
+    highlights: ["First glass of wine on the house", "All skill levels welcome", "Private group bookings from 8 pax"],
+  },
+  "Club Vega": {
+    bio: "Three rooms, three sounds, one Durban institution. House upstairs, amapiano in the side room, drum & bass in the basement.",
+    founded: "2014",
+    priceRange: "R120 — R250",
+    specialties: ["Multi-Room", "Amapiano", "Drum & Bass"],
+    amenities: ["Three Bars", "Cloakroom", "Secure Parking", "VIP Booths"],
+    openingHours: [
+      { day: "Thu", hours: "21:00 — 03:00" },
+      { day: "Fri — Sat", hours: "22:00 — 04:00" },
+    ],
+    contact: { phone: "+27 31 312 8000", email: "info@clubvega.co.za", instagram: "@clubvega.dbn" },
+    highlights: ["18+ only — ID required", "Dress code: smart casual", "VIP booths bookable from R2 500"],
+  },
 };
 
 export function getHosts(): Host[] {
@@ -256,6 +336,16 @@ export function getHosts(): Host[] {
     if (existing) {
       existing.events.push(s);
     } else {
+      const meta = hostMeta[s.hostName] ?? {
+        bio: "Booking the best nights in town.",
+        founded: "—",
+        priceRange: "—",
+        specialties: [],
+        amenities: [],
+        openingHours: [],
+        contact: { phone: "", email: "", instagram: "" },
+        highlights: [],
+      };
       map.set(slug, {
         slug,
         name: s.hostName,
@@ -263,7 +353,7 @@ export function getHosts(): Host[] {
         area: s.area,
         events: [s],
         followers: 200 + ((slug.length * 137) % 4800),
-        bio: hostBios[s.hostName] ?? "Booking the best nights in town.",
+        ...meta,
       });
     }
   }
