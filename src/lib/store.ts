@@ -98,6 +98,40 @@ export function toggleFollow(hostSlug: string) {
 }
 export function isFollowing(hostSlug: string) { return getFollows().includes(hostSlug); }
 
+// Checkout intent (transient — sessionStorage)
+export function setCheckoutIntent(intent: CheckoutIntent) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(CHECKOUT_KEY, JSON.stringify(intent));
+}
+export function getCheckoutIntent(): CheckoutIntent | null {
+  if (typeof window === "undefined") return null;
+  try { const v = sessionStorage.getItem(CHECKOUT_KEY); return v ? JSON.parse(v) : null; }
+  catch { return null; }
+}
+export function clearCheckoutIntent() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(CHECKOUT_KEY);
+}
+
+// Cancellation / refund (mock)
+export function cancelBooking(id: string) {
+  const all = getBookings();
+  const next = all.map((b) =>
+    b.id === id ? { ...b, status: "refund_pending" as BookingStatus } : b,
+  );
+  write(BOOKINGS_KEY, next);
+  // Simulate refund settling after a few seconds
+  setTimeout(() => {
+    const all2 = getBookings();
+    const next2 = all2.map((b) =>
+      b.id === id && b.status === "refund_pending"
+        ? { ...b, status: "refunded" as BookingStatus }
+        : b,
+    );
+    write(BOOKINGS_KEY, next2);
+  }, 4000);
+}
+
 export function useStore<T>(selector: () => T): T {
   const [, setTick] = useState(0);
   const [value, setValue] = useState<T>(selector);
