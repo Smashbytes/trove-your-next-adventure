@@ -219,6 +219,39 @@ function HostPage() {
             zoom={13}
           />
         </section>
+
+        {/* Contact */}
+        {(host.contact.phone || host.contact.email || host.contact.instagram) && (
+          <section className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-2">
+            <h3 className="font-display text-sm text-foreground/90 mb-1">Get in touch</h3>
+            {host.contact.phone && (
+              <a href={`tel:${host.contact.phone.replace(/\s/g, "")}`} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 text-primary" /> Phone</span>
+                <span className="text-xs font-medium">{host.contact.phone}</span>
+              </a>
+            )}
+            {host.contact.email && (
+              <a href={`mailto:${host.contact.email}`} className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 text-primary" /> Email</span>
+                <span className="text-xs font-medium truncate">{host.contact.email}</span>
+              </a>
+            )}
+            {host.contact.instagram && (
+              <a href={`https://instagram.com/${host.contact.instagram.replace("@", "")}`} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Instagram className="h-3.5 w-3.5 text-primary" /> Instagram</span>
+                <span className="text-xs font-medium">{host.contact.instagram}</span>
+              </a>
+            )}
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${host.events[0].lat}&mlon=${host.events[0].lng}#map=15/${host.events[0].lat}/${host.events[0].lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-foreground/10 py-2 text-[11px] font-semibold"
+            >
+              <Navigation className="h-3 w-3" /> Get directions
+            </a>
+          </section>
+        )}
       </main>
     </div>
   );
