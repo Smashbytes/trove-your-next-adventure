@@ -126,7 +126,17 @@ function CheckoutPage() {
         {/* Order summary card */}
         <section className="overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
           <div className="flex items-center gap-3 p-3">
-            <img src={spot.image} alt="" className="h-16 w-16 rounded-xl object-cover" />
+            <img
+              src={spot.image}
+              alt=""
+              data-fallback={spot.imageFallback}
+              onError={(e) => {
+                const t = e.currentTarget;
+                const fb = t.dataset.fallback;
+                if (fb && t.src !== fb) t.src = fb;
+              }}
+              className="h-16 w-16 rounded-xl object-cover"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-[10px] uppercase tracking-wider text-accent">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
               <p className="font-display text-base truncate">{spot.name}</p>

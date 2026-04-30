@@ -1,36 +1,59 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { Bell, Plus, Search, Flame } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bell, Plus, Search, Flame, Sparkles, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Logo } from "@/components/Logo";
 import { SpotCard } from "@/components/SpotCard";
-import { spots, type Category } from "@/lib/spots";
+import {
+  spots,
+  CATEGORIES,
+  CITIES,
+  editorsPicks,
+  type Category,
+  type City,
+} from "@/lib/spots";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Discover Tonight — TROVE" },
-      { name: "description", content: "Tonight's hottest spots in Joburg, Cape Town & Durban — booked in seconds." },
+      { name: "description", content: "Discover and book South Africa's best nightlife, food, music, adventures and more — in seconds." },
     ],
   }),
   component: Discover,
 });
 
 const tabs = ["For You", "Community", "Trending"] as const;
-const categories: Array<"All" | Category> = ["All", "Nightlife", "Comedy", "Adventure", "Chill"];
-const stories = spots.slice(0, 6);
+const categories: Array<"All" | Category> = ["All", ...CATEGORIES];
+const cityFilters: Array<"All" | City> = ["All", ...CITIES];
 
 function Discover() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("For You");
-  const [active, setActive] = useState<"All" | Category>("All");
-  const filtered = active === "All" ? spots : spots.filter((s) => s.category === active);
-  const feed =
-    tab === "Trending"
-      ? [...filtered].sort((a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax)
-      : tab === "Community"
-        ? filtered.filter((s) => s.friendsGoing.length > 0)
-        : filtered;
+  const [activeCat, setActiveCat] = useState<"All" | Category>("All");
+  const [activeCity, setActiveCity] = useState<"All" | City>("All");
+
+  const stories = useMemo(() => spots.slice(0, 8), []);
+  const picks = useMemo(() => editorsPicks(), []);
+
+  const filtered = useMemo(() => {
+    let r = spots;
+    if (activeCat !== "All") r = r.filter((s) => s.category === activeCat);
+    if (activeCity !== "All") r = r.filter((s) => s.city === activeCity);
+    return r;
+  }, [activeCat, activeCity]);
+
+  const feed = useMemo(() => {
+    if (tab === "Trending")
+      return [...filtered].sort(
+        (a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax,
+      );
+    if (tab === "Community") return filtered.filter((s) => s.friendsGoing.length > 0);
+    return filtered;
+  }, [tab, filtered]);
+
+  const heroCity = activeCity === "All" ? "South Africa" : activeCity;
+  const heroCount = filtered.length;
 
   return (
     <AppShell>
@@ -86,7 +109,18 @@ function Discover() {
               <Link key={s.id} to="/spot/$id" params={{ id: s.id }} className="shrink-0 flex flex-col items-center gap-1.5">
                 <div className="relative h-[68px] w-[68px] rounded-2xl overflow-hidden p-[2px] bg-gradient-brand">
                   <div className="h-full w-full overflow-hidden rounded-[14px]">
-                    <img src={s.image} alt={s.name} loading="lazy" className="h-full w-full object-cover" />
+                    <img
+                      src={s.image}
+                      alt={s.name}
+                      loading="lazy"
+                      data-fallback={s.imageFallback}
+                      onError={(e) => {
+                        const t = e.currentTarget;
+                        const fb = t.dataset.fallback;
+                        if (fb && t.src !== fb) t.src = fb;
+                      }}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-background px-1.5 py-0.5 text-[9px] font-bold text-primary ring-1 ring-primary/40">
                     LIVE
@@ -107,13 +141,13 @@ function Discover() {
           <div className="absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-accent/20 blur-3xl" />
           <div className="relative">
             <p className="text-[10px] uppercase tracking-[0.25em] text-primary inline-flex items-center gap-1.5">
-              <Flame className="h-3 w-3" /> Tonight in Joburg
+              <Flame className="h-3 w-3" /> {heroCount} spots in {heroCity}
             </p>
             <h1 className="mt-1.5 font-display text-[2rem] leading-[0.95]">
               Decide. <span className="text-gradient">Book.</span> Show up.
             </h1>
             <p className="mt-2 text-[13px] text-muted-foreground">
-              Rooftops, raves & raw comedy — sorted in 30 seconds.
+              Nightlife, food, music, adventures, wellness — sorted in 30 seconds.
             </p>
           </div>
         </motion.section>
@@ -122,11 +156,11 @@ function Discover() {
         <section>
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
             {categories.map((c) => {
-              const isActive = active === c;
+              const isActive = activeCat === c;
               return (
                 <button
                   key={c}
-                  onClick={() => setActive(c)}
+                  onClick={() => setActiveCat(c)}
                   className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
                     isActive
                       ? "bg-foreground text-background"
@@ -140,14 +174,93 @@ function Discover() {
           </div>
         </section>
 
+        {/* City chips */}
+        <section>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+            {cityFilters.map((c) => {
+              const isActive = activeCity === c;
+              return (
+                <button
+                  key={c}
+                  onClick={() => setActiveCity(c)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                    isActive
+                      ? "bg-gradient-brand text-primary-foreground shadow-glow-soft"
+                      : "bg-surface/60 ring-1 ring-border/60 text-muted-foreground"
+                  }`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Editor's Picks rail */}
+        {picks.length > 0 && activeCat === "All" && activeCity === "All" && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg inline-flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Editor's Picks
+              </h2>
+              <Link to="/search" className="inline-flex items-center text-[11px] text-muted-foreground hover:text-foreground">
+                See all <ChevronRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar -mx-5 px-5 snap-x snap-mandatory">
+              {picks.map((s) => (
+                <Link
+                  key={s.id}
+                  to="/spot/$id"
+                  params={{ id: s.id }}
+                  className="snap-start shrink-0 w-[78%] sm:w-[60%] relative aspect-[4/5] overflow-hidden rounded-3xl ring-1 ring-border/50"
+                >
+                  <img
+                    src={s.image}
+                    alt={s.name}
+                    loading="lazy"
+                    data-fallback={s.imageFallback}
+                    onError={(e) => {
+                      const t = e.currentTarget;
+                      const fb = t.dataset.fallback;
+                      if (fb && t.src !== fb) t.src = fb;
+                    }}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+                  <div className="absolute inset-x-3 top-3">
+                    <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90">
+                      {s.subcategory || s.category}
+                    </span>
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 p-4">
+                    <h3 className="font-display text-xl leading-[0.95] text-white">{s.name}</h3>
+                    <p className="mt-1 text-[11px] text-white/70 line-clamp-1">{s.tagline}</p>
+                    <p className="mt-2 text-[10px] uppercase tracking-wider text-white/60">
+                      {s.city} · {s.area}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Vertical social feed */}
         <section className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg">
+              {activeCat === "All" ? "Tonight's feed" : activeCat}
+            </h2>
+            <p className="text-[11px] text-muted-foreground">{feed.length} spots</p>
+          </div>
           {feed.map((s, i) => (
             <SpotCard key={s.id} spot={s} index={i} />
           ))}
           {!feed.length && (
             <div className="py-16 text-center text-sm text-muted-foreground">
-              Nothing in <span className="text-foreground">{tab}</span> yet. Try another feed.
+              Nothing here yet. Try a different city or category.
             </div>
           )}
         </section>

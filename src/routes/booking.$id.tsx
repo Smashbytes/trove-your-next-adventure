@@ -81,7 +81,17 @@ function BookingPage() {
         className="mt-8 overflow-hidden rounded-3xl bg-surface ring-1 ring-border shadow-glow-soft"
       >
         <div className="relative h-32">
-          <img src={spot.image} alt={spot.name} className="h-full w-full object-cover" />
+          <img
+            src={spot.image}
+            alt={spot.name}
+            data-fallback={spot.imageFallback}
+            onError={(e) => {
+              const t = e.currentTarget;
+              const fb = t.dataset.fallback;
+              if (fb && t.src !== fb) t.src = fb;
+            }}
+            className="h-full w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-surface to-transparent" />
         </div>
         <div className="-mt-10 px-6 pb-6 relative">

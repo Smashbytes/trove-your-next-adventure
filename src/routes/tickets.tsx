@@ -74,7 +74,18 @@ function BookingRow({ bookingId, spotId, qty, total, dim }: { bookingId: string;
       to="/booking/$id" params={{ id: bookingId }}
       className={`flex items-center gap-3 rounded-2xl bg-surface ring-1 ring-border p-3 transition hover:ring-primary/40 ${dim || cancelled ? "opacity-60" : ""}`}
     >
-      <img src={spot.image} alt={spot.name} className={`h-16 w-16 rounded-xl object-cover ${cancelled ? "grayscale" : ""}`} loading="lazy" />
+      <img
+        src={spot.image}
+        alt={spot.name}
+        loading="lazy"
+        data-fallback={spot.imageFallback}
+        onError={(e) => {
+          const t = e.currentTarget;
+          const fb = t.dataset.fallback;
+          if (fb && t.src !== fb) t.src = fb;
+        }}
+        className={`h-16 w-16 rounded-xl object-cover ${cancelled ? "grayscale" : ""}`}
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-[10px] uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>

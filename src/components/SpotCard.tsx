@@ -21,6 +21,12 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
             loading="lazy"
             width={1024}
             height={1280}
+            data-fallback={spot.imageFallback}
+            onError={(e) => {
+              const t = e.currentTarget;
+              const fb = t.dataset.fallback;
+              if (fb && t.src !== fb) t.src = fb;
+            }}
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
           />
 
@@ -30,14 +36,6 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
               {spot.category}
             </span>
             <CapacityPill spot={spot} />
-          </div>
-
-          {/* Futuristic HUD corners */}
-          <div className="pointer-events-none absolute inset-3">
-            <span className="absolute -left-px -top-px h-3 w-3 border-l border-t border-primary/70" />
-            <span className="absolute -right-px -top-px h-3 w-3 border-r border-t border-accent/70" />
-            <span className="absolute -bottom-px -left-px h-3 w-3 border-b border-l border-accent/70" />
-            <span className="absolute -bottom-px -right-px h-3 w-3 border-b border-r border-primary/70" />
           </div>
 
           {/* Bottom gradient + content */}

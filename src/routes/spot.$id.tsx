@@ -63,7 +63,17 @@ function SpotPage() {
       {/* Hero image */}
       <div className="relative">
         <div className="relative h-[60vh] overflow-hidden">
-          <img src={spot.image} alt={spot.name} className="h-full w-full object-cover" />
+          <img
+            src={spot.image}
+            alt={spot.name}
+            data-fallback={spot.imageFallback}
+            onError={(e) => {
+              const t = e.currentTarget;
+              const fb = t.dataset.fallback;
+              if (fb && t.src !== fb) t.src = fb;
+            }}
+            className="h-full w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-background/20" />
         </div>
 
