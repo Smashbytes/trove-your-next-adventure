@@ -1,4 +1,7 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthModal } from "@/components/AuthModal";
 
 import appCss from "../styles.css?url";
 
@@ -30,7 +33,7 @@ export const Route = createRootRoute({
     ],
   }),
   shellComponent: RootShell,
-  component: () => <Outlet />,
+  component: RootComponent,
   notFoundComponent: NotFoundComponent,
 });
 
@@ -59,5 +62,24 @@ function RootShell({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
+  );
+}
+
+function AppWithAuth() {
+  const { showAuthModal, closeAuthModal } = useAuth();
+  return (
+    <>
+      <Outlet />
+      <AuthModal open={showAuthModal} onClose={closeAuthModal} />
+      <Toaster position="top-center" richColors />
+    </>
+  );
+}
+
+function RootComponent() {
+  return (
+    <AuthProvider>
+      <AppWithAuth />
+    </AuthProvider>
   );
 }

@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
   component: Discover,
 });
 
-const tabs = ["For You", "Community", "Trending"] as const;
+const tabs = ["For You", "With Friends", "Trending"] as const;
 const categories: Array<"All" | Category> = ["All", ...CATEGORIES];
 const cityFilters: Array<"All" | City> = ["All", ...CITIES];
 
@@ -48,12 +48,12 @@ function Discover() {
       return [...filtered].sort(
         (a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax,
       );
-    if (tab === "Community") return filtered.filter((s) => s.friendsGoing.length > 0);
+    if (tab === "With Friends") return filtered.filter((s) => s.friendsGoing.length > 0);
     return filtered;
   }, [tab, filtered]);
 
   const heroCity = activeCity === "All" ? "South Africa" : activeCity;
-  const heroCount = filtered.length;
+  const heroCount = feed.length;
 
   return (
     <AppShell>
@@ -147,7 +147,7 @@ function Discover() {
               Decide. <span className="text-gradient">Book.</span> Show up.
             </h1>
             <p className="mt-2 text-[13px] text-muted-foreground">
-              Nightlife, food, music, adventures, wellness — sorted in 30 seconds.
+              Nightlife, food, music, adventure, wellness, arts, family & community — sorted in 30 seconds.
             </p>
           </div>
         </motion.section>

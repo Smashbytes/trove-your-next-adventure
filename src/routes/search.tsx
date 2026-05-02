@@ -197,8 +197,9 @@ function SearchPage() {
             </div>
 
             <button
-              onClick={() => { setVibe(null); setCity(null); setMaxPrice(7000); }}
-              className="w-full rounded-full bg-surface ring-1 ring-border py-2.5 text-xs font-medium text-muted-foreground"
+              onClick={() => { setVibe(null); setCity(null); setCat(null); setMaxPrice(7000); }}
+              disabled={activeFilterCount === 0}
+              className="w-full rounded-full bg-surface ring-1 ring-border py-2.5 text-xs font-medium text-muted-foreground disabled:opacity-40"
             >
               Reset filters
             </button>
