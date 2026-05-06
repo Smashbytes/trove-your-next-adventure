@@ -82,7 +82,7 @@ function Discover() {
                 onClick={() => setTab(t)}
                 className="relative pb-1.5 text-sm font-semibold"
               >
-                <span className={isActive ? "text-foreground" : "text-muted-foreground"}>{t}</span>
+                <span className={isActive ? "text-foreground font-semibold" : "text-muted-foreground font-medium"}>{t}</span>
                 {isActive && (
                   <motion.span
                     layoutId="tab-underline"
@@ -146,7 +146,7 @@ function Discover() {
             <h1 className="mt-1.5 font-display text-[2rem] leading-[0.95]">
               Decide. <span className="text-gradient">Book.</span> Show up.
             </h1>
-            <p className="mt-2 text-[13px] text-muted-foreground">
+            <p className="mt-2 text-[13px] font-medium text-muted-foreground">
               Nightlife, food, music, adventure, wellness, arts, family & community — sorted in 30 seconds.
             </p>
           </div>
@@ -235,9 +235,9 @@ function Discover() {
                     </span>
                   </div>
                   <div className="absolute inset-x-0 bottom-0 p-4">
-                    <h3 className="font-display text-xl leading-[0.95] text-white">{s.name}</h3>
-                    <p className="mt-1 text-[11px] text-white/70 line-clamp-1">{s.tagline}</p>
-                    <p className="mt-2 text-[10px] uppercase tracking-wider text-white/60">
+                    <h3 className="font-display text-xl leading-[1.0] text-white drop-shadow-sm">{s.name}</h3>
+                    <p className="mt-1.5 text-[11px] font-medium text-white/80 line-clamp-1">{s.tagline}</p>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/70">
                       {s.city} · {s.area}
                     </p>
                   </div>
@@ -248,12 +248,12 @@ function Discover() {
         )}
 
         {/* Vertical social feed */}
-        <section className="space-y-5">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg">
               {activeCat === "All" ? "Tonight's feed" : activeCat}
             </h2>
-            <p className="text-[11px] text-muted-foreground">{feed.length} spots</p>
+            <p className="text-[11px] font-semibold text-muted-foreground">{feed.length} spots</p>
           </div>
           {feed.map((s, i) => (
             <SpotCard key={s.id} spot={s} index={i} />

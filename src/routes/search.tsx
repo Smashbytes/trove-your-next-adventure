@@ -118,7 +118,7 @@ function SearchPage() {
       </header>
 
       <main className="px-5 pt-5 space-y-4">
-        <p className="text-xs text-muted-foreground">{results.length} spots</p>
+        <p className="text-xs font-semibold text-muted-foreground">{results.length} spots</p>
         {results.map((s, i) => <SpotCard key={s.id} spot={s} index={i} />)}
         {!results.length && (
           <div className="py-16 text-center text-sm text-muted-foreground">

@@ -74,7 +74,7 @@ function SpotPage() {
             }}
             className="h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-background/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/50 to-[#0a0a0a]/10" />
         </div>
 
         {/* top bar */}
@@ -99,7 +99,7 @@ function SpotPage() {
             <CapacityPill spot={spot} />
           </div>
           <h1 className="font-display text-3xl leading-tight">{spot.name}</h1>
-          <p className="text-sm text-muted-foreground">{spot.tagline}</p>
+          <p className="text-sm font-medium text-muted-foreground">{spot.tagline}</p>
         </div>
       </div>
 
@@ -131,7 +131,7 @@ function SpotPage() {
         {/* About */}
         <section>
           <h2 className="font-display text-xl mb-2">About</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">{spot.description}</p>
+          <p className="text-sm font-medium text-muted-foreground leading-relaxed">{spot.description}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {spot.vibes.map((v) => (
               <span key={v} className="rounded-full bg-surface-elevated px-2.5 py-1 text-[11px] text-muted-foreground">#{v}</span>
