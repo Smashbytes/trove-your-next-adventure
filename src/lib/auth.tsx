@@ -39,46 +39,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else setIsLoading(false);
-    });
+    let cancelled = false;
+
+    const safetyTimeout = setTimeout(() => {
+      if (!cancelled) setIsLoading(false);
+    }, 8000);
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (cancelled) return;
+        setSession(session);
+        if (session) fetchProfile(session.user.id);
+        else setIsLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('[auth] getSession failed:', error);
+        setIsLoading(false);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (cancelled) return;
       setSession(session);
       if (session) {
+        setShowAuthModal(false);
         await fetchProfile(session.user.id);
       } else {
         setProfile(null);
         setHostProfile(null);
         setIsLoading(false);
+        setShowAuthModal(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchProfile(userId: string) {
     setIsLoading(true);
     try {
-      const { data: p } = await supabase
+      const { data: p, error: pErr } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
-      setProfile(p);
+        .maybeSingle();
+      if (pErr) console.error('[auth] profiles fetch failed:', pErr);
+      setProfile(p ?? null);
 
       if (p?.is_host) {
-        const { data: hp } = await supabase
+        const { data: hp, error: hpErr } = await supabase
           .from('host_profiles')
           .select('*')
           .eq('user_id', userId)
-          .single();
-        setHostProfile(hp);
+          .maybeSingle();
+        if (hpErr) console.error('[auth] host_profiles fetch failed:', hpErr);
+        setHostProfile(hp ?? null);
       } else {
         setHostProfile(null);
       }
+    } catch (error) {
+      console.error('[auth] fetchProfile threw:', error);
     } finally {
       setIsLoading(false);
     }
