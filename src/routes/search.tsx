@@ -3,14 +3,8 @@ import { useMemo, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SpotCard } from "@/components/SpotCard";
-import {
-  spots,
-  CATEGORIES,
-  CITIES,
-  type Vibe,
-  type Category,
-  type City,
-} from "@/lib/spots";
+import { CITIES, type Vibe } from "@/lib/spots";
+import { useListings, useTopLevelCategories } from "@/lib/listings-api";
 
 export const Route = createFileRoute("/search")({
   head: () => ({ meta: [{ title: "Search — TROVE" }] }),
@@ -24,32 +18,33 @@ function SearchPage() {
   const [q, setQ] = useState("");
   const [maxPrice, setMaxPrice] = useState(7000);
   const [vibe, setVibe] = useState<Vibe | null>(null);
-  const [cat, setCat] = useState<Category | null>(null);
-  const [city, setCity] = useState<City | null>(null);
+  const [cat, setCat] = useState<string | null>(null);
+  const [city, setCity] = useState<string | null>(null);
   const [sort, setSort] = useState<(typeof SORTS)[number]>("Trending");
   const [openFilters, setOpenFilters] = useState(false);
 
+  const { names: catNames } = useTopLevelCategories();
+  const { data: listings = [], isLoading } = useListings({
+    query: q,
+    city: city ?? undefined,
+    category: cat ?? undefined,
+  });
+
   const results = useMemo(() => {
-    const ql = q.toLowerCase();
-    let r = spots.filter((s) => {
-      const haystack = `${s.name} ${s.area} ${s.tagline} ${s.subcategory} ${(s.tags ?? []).join(" ")}`.toLowerCase();
-      return (
-        haystack.includes(ql) &&
-        s.price <= maxPrice &&
-        (!vibe || s.vibes.includes(vibe)) &&
-        (!cat || s.category === cat) &&
-        (!city || s.city === city)
-      );
-    });
+    let r = listings.filter(
+      (s) => s.price <= maxPrice && (!vibe || s.vibes.includes(vibe)),
+    );
     if (sort === "Closest") r = [...r].sort((a, b) => a.distanceKm - b.distanceKm);
     if (sort === "Cheapest") r = [...r].sort((a, b) => a.price - b.price);
     if (sort === "Top Rated") r = [...r].sort((a, b) => b.rating - a.rating);
     if (sort === "Trending")
       r = [...r].sort(
-        (a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax,
+        (a, b) =>
+          (b.capacityMax ? b.capacityBooked / b.capacityMax : 0) -
+          (a.capacityMax ? a.capacityBooked / a.capacityMax : 0),
       );
     return r;
-  }, [q, maxPrice, vibe, cat, city, sort]);
+  }, [listings, maxPrice, vibe, sort]);
 
   const activeFilterCount = (vibe ? 1 : 0) + (cat ? 1 : 0) + (city ? 1 : 0) + (maxPrice < 7000 ? 1 : 0);
 
@@ -89,7 +84,7 @@ function SearchPage() {
           >
             All
           </button>
-          {CATEGORIES.map((c) => (
+          {catNames.map((c) => (
             <button
               key={c}
               onClick={() => setCat(cat === c ? null : c)}
@@ -119,8 +114,12 @@ function SearchPage() {
 
       <main className="px-5 pt-5 space-y-4">
         <p className="text-xs font-semibold text-muted-foreground">{results.length} spots</p>
-        {results.map((s, i) => <SpotCard key={s.id} spot={s} index={i} />)}
-        {!results.length && (
+        {isLoading &&
+          [0, 1].map((i) => (
+            <div key={i} className="aspect-[4/5] w-full animate-pulse rounded-3xl bg-surface" />
+          ))}
+        {!isLoading && results.map((s, i) => <SpotCard key={s.id} spot={s} index={i} />)}
+        {!isLoading && !results.length && (
           <div className="py-16 text-center text-sm text-muted-foreground">
             No spots match. Loosen the filters?
           </div>

@@ -1,28 +1,31 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Clock, Phone, Mail, Instagram, Sparkles, Award, CheckCircle2, Navigation } from "lucide-react";
-import { getHost, formatDate, formatTime, formatPrice } from "@/lib/spots";
-import { toggleFollow, useStore, getFollows } from "@/lib/store";
+import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Sparkles } from "lucide-react";
+import { formatDate, formatTime, formatPrice } from "@/lib/spots";
+import { useHostBySlug } from "@/lib/listings-api";
+import { useFollowedIds, useToggleFollow } from "@/lib/social";
 import { SpotMap } from "@/components/SpotMap";
 
 export const Route = createFileRoute("/host/$slug")({
-  head: ({ params }) => {
-    const h = getHost(params.slug);
-    return {
-      meta: [
-        { title: h ? `${h.name} — TROVE` : "Spot — TROVE" },
-        { name: "description", content: h?.bio ?? "" },
-      ],
-    };
-  },
+  head: () => ({ meta: [{ title: "Spot — TROVE" }] }),
   component: HostPage,
   notFoundComponent: () => <div className="p-10 text-center">Spot not found.</div>,
 });
 
 function HostPage() {
   const { slug } = useParams({ from: "/host/$slug" });
-  const host = getHost(slug);
-  const following = useStore(() => getFollows()).includes(slug);
+  const { data: host, isLoading } = useHostBySlug(slug);
+  const { data: followedIds = [] } = useFollowedIds();
+  const toggleFollow = useToggleFollow();
+  const following = !!host && followedIds.includes(host.userId);
+
+  if (isLoading) {
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!host) {
     return (
@@ -32,8 +35,10 @@ function HostPage() {
     );
   }
 
-  const cover = host.events[0]?.image;
-  const followerCount = host.followers + (following ? 1 : 0);
+  const cover = host.heroUrl ?? host.spots[0]?.image;
+  const mapPoints = host.spots
+    .filter((e) => e.lat && e.lng)
+    .map((e) => ({ lat: e.lat, lng: e.lng, label: e.name, sublabel: e.area || e.city }));
 
   return (
     <div className="mx-auto min-h-screen max-w-md pb-20">
@@ -62,40 +67,31 @@ function HostPage() {
           <div className="flex-1 pt-2">
             <div className="flex items-center gap-1.5">
               <h1 className="font-display text-2xl leading-tight">{host.name}</h1>
-              <BadgeCheck className="h-4 w-4 text-accent" />
+              {host.verified && <BadgeCheck className="h-4 w-4 text-accent" />}
             </div>
-            <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3" /> {host.area} · {host.city}
-            </p>
+            {host.city && (
+              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" /> {host.city}
+              </p>
+            )}
           </div>
         </section>
 
         {/* Bio */}
-        <p className="text-sm text-muted-foreground leading-relaxed">{host.bio}</p>
-
-        {/* Specialties chips */}
-        {host.specialties.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {host.specialties.map((s) => (
-              <span key={s} className="rounded-full bg-primary/10 ring-1 ring-primary/30 px-2.5 py-1 text-[11px] text-primary">
-                {s}
-              </span>
-            ))}
-          </div>
+        {host.bio && (
+          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{host.bio}</p>
         )}
 
         {/* Stats */}
-        <section className="grid grid-cols-4 gap-2 text-center">
-          <Stat label="Events" value={host.events.length} />
-          <Stat label="Followers" value={followerCount.toLocaleString("en-ZA")} />
-          <Stat label="Since" value={host.founded} />
-          <Stat label="Price" value={host.priceRange.split(" ")[0]} />
+        <section className="grid grid-cols-2 gap-2 text-center">
+          <Stat label="Events" value={host.spots.length} />
+          <Stat label="City" value={host.city ?? "—"} />
         </section>
 
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={() => toggleFollow(slug)}
+            onClick={() => toggleFollow.mutate(host.userId)}
             className={`flex-1 rounded-full py-2.5 text-sm font-semibold transition active:scale-[0.98] ${
               following
                 ? "bg-surface ring-1 ring-border text-foreground"
@@ -109,147 +105,72 @@ function HostPage() {
           </button>
         </div>
 
-        {/* Highlights */}
-        {host.highlights.length > 0 && (
-          <section className="rounded-2xl bg-gradient-soft ring-1 ring-primary/30 p-4">
-            <h3 className="font-display text-sm inline-flex items-center gap-2 text-primary">
-              <Sparkles className="h-4 w-4" /> Good to know
-            </h3>
-            <ul className="mt-2 space-y-1.5">
-              {host.highlights.map((h) => (
-                <li key={h} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-accent shrink-0" />
-                  <span>{h}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Opening hours + Amenities */}
-        <section className="grid grid-cols-2 gap-3">
-          {host.openingHours.length > 0 && (
-            <div className="rounded-2xl bg-surface ring-1 ring-border p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-                <Clock className="h-3 w-3" /> Hours
-              </p>
-              <ul className="mt-2 space-y-1">
-                {host.openingHours.map((h) => (
-                  <li key={h.day} className="text-[11px] flex justify-between gap-2">
-                    <span className="text-muted-foreground">{h.day}</span>
-                    <span className="font-medium text-foreground/90 text-right">{h.hours}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {host.amenities.length > 0 && (
-            <div className="rounded-2xl bg-surface ring-1 ring-border p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-                <Award className="h-3 w-3" /> Amenities
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {host.amenities.map((a) => (
-                  <span key={a} className="rounded-md bg-surface-elevated px-1.5 py-0.5 text-[10px] text-foreground/80">
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Posts / Events */}
+        {/* Events */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-xl inline-flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" /> Upcoming events
             </h2>
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {host.events.length} posts
+              {host.spots.length} posts
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            {host.events.map((e, i) => (
-              <motion.div
-                key={e.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <Link
-                  to="/spot/$id"
-                  params={{ id: e.id }}
-                  className="group block relative aspect-square overflow-hidden rounded-2xl ring-1 ring-border"
+          {host.spots.length === 0 ? (
+            <div className="rounded-2xl bg-surface ring-1 ring-border p-8 text-center text-sm text-muted-foreground inline-flex flex-col items-center gap-2 w-full">
+              <Sparkles className="h-5 w-5 text-primary" />
+              No live events right now. Follow to get notified.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {host.spots.map((e, i) => (
+                <motion.div
+                  key={e.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
                 >
-                  <img
-                    src={e.image}
-                    alt={e.name}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                  <div className="absolute inset-x-0 bottom-0 p-2.5 text-white">
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-accent">
-                      {formatDate(e.date)} · {formatTime(e.date)}
-                    </p>
-                    <p className="font-display text-sm leading-tight line-clamp-2">{e.name}</p>
-                    <p className="mt-0.5 text-[10px] text-white/70">{formatPrice(e.price)}</p>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
+                  <Link
+                    to="/spot/$id"
+                    params={{ id: e.id }}
+                    className="group block relative aspect-square overflow-hidden rounded-2xl ring-1 ring-border"
+                  >
+                    <img
+                      src={e.image}
+                      alt={e.name}
+                      loading="lazy"
+                      data-fallback={e.imageFallback}
+                      onError={(ev) => {
+                        const t = ev.currentTarget;
+                        const fb = t.dataset.fallback;
+                        if (fb && t.src !== fb) t.src = fb;
+                      }}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 p-2.5 text-white">
+                      {e.date && (
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-accent">
+                          {formatDate(e.date)} · {formatTime(e.date)}
+                        </p>
+                      )}
+                      <p className="font-display text-sm leading-tight line-clamp-2">{e.name}</p>
+                      <p className="mt-0.5 text-[10px] text-white/70">{formatPrice(e.price)}</p>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </section>
 
-        {/* Map of host's events */}
-        <section>
-          <h2 className="font-display text-xl mb-3 inline-flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" /> On the map
-          </h2>
-          <SpotMap
-            points={host.events.map((e) => ({
-              lat: e.lat,
-              lng: e.lng,
-              label: e.name,
-              sublabel: `${e.area} · ${formatDate(e.date)}`,
-            }))}
-            height={240}
-            zoom={13}
-          />
-        </section>
-
-        {/* Contact */}
-        {(host.contact.phone || host.contact.email || host.contact.instagram) && (
-          <section className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-2">
-            <h3 className="font-display text-sm text-foreground/90 mb-1">Get in touch</h3>
-            {host.contact.phone && (
-              <a href={`tel:${host.contact.phone.replace(/\s/g, "")}`} className="flex items-center justify-between gap-3 py-1.5">
-                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3.5 w-3.5 text-primary" /> Phone</span>
-                <span className="text-xs font-medium">{host.contact.phone}</span>
-              </a>
-            )}
-            {host.contact.email && (
-              <a href={`mailto:${host.contact.email}`} className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
-                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5 text-primary" /> Email</span>
-                <span className="text-xs font-medium truncate">{host.contact.email}</span>
-              </a>
-            )}
-            {host.contact.instagram && (
-              <a href={`https://instagram.com/${host.contact.instagram.replace("@", "")}`} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 py-1.5 border-t border-border">
-                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><Instagram className="h-3.5 w-3.5 text-primary" /> Instagram</span>
-                <span className="text-xs font-medium">{host.contact.instagram}</span>
-              </a>
-            )}
-            <a
-              href={`https://www.openstreetmap.org/?mlat=${host.events[0].lat}&mlon=${host.events[0].lng}#map=15/${host.events[0].lat}/${host.events[0].lng}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-foreground/10 py-2 text-[11px] font-semibold"
-            >
-              <Navigation className="h-3 w-3" /> Get directions
-            </a>
+        {/* Map */}
+        {mapPoints.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl mb-3 inline-flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-primary" /> On the map
+            </h2>
+            <SpotMap points={mapPoints} height={240} zoom={13} />
           </section>
         )}
       </main>

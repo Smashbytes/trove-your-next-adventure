@@ -5,7 +5,11 @@ import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
 import { SpotMap } from "@/components/SpotMap";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
-import { getSaved, setCheckoutIntent, toggleSaved, useStore, type SplitParticipant } from "@/lib/store";
+import { useListing } from "@/lib/listings-api";
+import { useAuth } from "@/lib/auth";
+import { useFriendsGoing } from "@/lib/friends-api";
+import { useSavedIds, useToggleSave } from "@/lib/social";
+import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
 import { useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
@@ -19,17 +23,42 @@ export const Route = createFileRoute("/spot/$id")({
 
 function SpotPage() {
   const { id } = useParams({ from: "/spot/$id" });
-  const spot = getSpot(id);
+  const { data: spot, isLoading } = useListing(id);
+  const { data: friendsGoing = [] } = useFriendsGoing(id);
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
   const [splitOpen, setSplitOpen] = useState(false);
   const [pickedFriends, setPickedFriends] = useState<string[]>([]);
-  const saved = useStore(() => getSaved()).includes(id);
+  const { data: savedIds = [] } = useSavedIds();
+  const toggleSave = useToggleSave();
+  const saved = savedIds.includes(id);
+  const { isAuthenticated, openAuthModal } = useAuth();
 
   const total = spot ? spot.price * qty : 0;
   const splitCount = pickedFriends.length + 1; // include me
   const perPerson = useMemo(() => Math.ceil(total / splitCount), [total, splitCount]);
 
+  if (isLoading) {
+    return (
+      <div className="mx-auto min-h-dvh max-w-md">
+        <div className="h-[60vh] w-full animate-pulse bg-surface" />
+        <div className="px-5 pt-5 space-y-5">
+          <div className="flex gap-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex-1 h-20 rounded-2xl animate-pulse bg-surface" />
+            ))}
+          </div>
+          <div className="h-16 rounded-2xl animate-pulse bg-surface" />
+          <div className="space-y-2.5">
+            <div className="h-7 w-32 rounded-full animate-pulse bg-surface" />
+            <div className="h-4 w-full rounded-full animate-pulse bg-surface" />
+            <div className="h-4 w-4/5 rounded-full animate-pulse bg-surface" />
+            <div className="h-4 w-3/5 rounded-full animate-pulse bg-surface" />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!spot) return <div className="p-10 text-center">Spot not found.</div>;
 
   function book() {
@@ -38,7 +67,7 @@ function SpotPage() {
     if (pickedFriends.length > 0) {
       const participants: SplitParticipant[] = [
         { friendId: "me", name: "You", initial: "Y", hue: 320, paid: true },
-        ...spot.friendsGoing
+        ...friendsGoing
           .filter((f) => pickedFriends.includes(f.id))
           .map((f) => ({
             friendId: f.id,
@@ -50,7 +79,13 @@ function SpotPage() {
       ];
       split = { participants, perPerson };
     }
+    // Persist the intent first so it survives the auth detour, then require an
+    // account before checkout.
     setCheckoutIntent({ spotId: spot.id, qty, total, split });
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
     navigate({ to: "/checkout/$id", params: { id: spot.id } });
   }
 
@@ -59,7 +94,7 @@ function SpotPage() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-md pb-32">
+    <div className="mx-auto min-h-dvh max-w-md pb-32">
       {/* Hero image */}
       <div className="relative">
         <div className="relative h-[60vh] overflow-hidden">
@@ -86,7 +121,7 @@ function SpotPage() {
             <button className="grid h-10 w-10 place-items-center rounded-full glass-strong">
               <Share2 className="h-4 w-4" />
             </button>
-            <button onClick={() => toggleSaved(spot.id)} className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+            <button onClick={() => toggleSave.mutate(spot.id)} className="grid h-10 w-10 place-items-center rounded-full glass-strong">
               <Heart className={`h-4 w-4 ${saved ? "fill-primary text-primary" : ""}`} />
             </button>
           </div>
@@ -105,21 +140,29 @@ function SpotPage() {
 
       <main className="px-5 pt-5 space-y-6">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="rounded-xl bg-surface ring-1 ring-border p-3">
-            <Star className="mx-auto h-4 w-4 fill-warning text-warning" />
-            <div className="mt-1 font-display text-lg">{spot.rating}</div>
-            <div className="text-[10px] text-muted-foreground">{spot.reviews} reviews</div>
+        <div className="flex rounded-2xl bg-surface ring-1 ring-border overflow-hidden">
+          <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
+            <div className="flex items-center gap-1.5">
+              <Star className="h-3.5 w-3.5 fill-warning text-warning" />
+              <span className="font-display text-lg">{spot.rating}</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">{spot.reviews} reviews</span>
           </div>
-          <div className="rounded-xl bg-surface ring-1 ring-border p-3">
-            <MapPin className="mx-auto h-4 w-4 text-primary" />
-            <div className="mt-1 font-display text-lg">{spot.distanceKm}km</div>
-            <div className="text-[10px] text-muted-foreground">{spot.area}</div>
+          <div className="w-px bg-border/60 my-3" />
+          <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-primary" />
+              <span className="font-display text-lg">{spot.distanceKm}km</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">{spot.area}</span>
           </div>
-          <div className="rounded-xl bg-surface ring-1 ring-border p-3">
-            <Clock className="mx-auto h-4 w-4 text-accent" />
-            <div className="mt-1 font-display text-sm">{formatTime(spot.date)}</div>
-            <div className="text-[10px] text-muted-foreground">{formatDate(spot.date)}</div>
+          <div className="w-px bg-border/60 my-3" />
+          <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-accent" />
+              <span className="font-display text-base">{formatTime(spot.date)}</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">{formatDate(spot.date)}</span>
           </div>
         </div>
 
@@ -140,7 +183,7 @@ function SpotPage() {
         </section>
 
         {/* Spark / friends */}
-        {spot.friendsGoing.length > 0 && (
+        {friendsGoing.length > 0 && (
           <section className="rounded-2xl bg-gradient-soft p-4 ring-1 ring-primary/30">
             <div className="flex items-center justify-between">
               <div>
@@ -151,7 +194,7 @@ function SpotPage() {
                 <Send className="h-3 w-3" /> Invite
               </button>
             </div>
-            <div className="mt-3"><FriendStack friends={spot.friendsGoing} max={5} size={32} /></div>
+            <div className="mt-3"><FriendStack friends={friendsGoing} max={5} size={32} /></div>
           </section>
         )}
 
@@ -177,9 +220,7 @@ function SpotPage() {
         <section>
           <div className="mb-3 flex items-end justify-between">
             <div>
-              <h2 className="font-display text-xl inline-flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-primary" /> Where it's at
-              </h2>
+              <h2 className="font-display text-xl">Where it's at</h2>
               <p className="mt-1 text-xs text-muted-foreground">{spot.address}</p>
             </div>
             <a
@@ -199,7 +240,7 @@ function SpotPage() {
         </section>
 
         {/* Split bill toggle */}
-        {spot.friendsGoing.length > 0 && (
+        {friendsGoing.length > 0 && (
           <section className="rounded-2xl bg-surface ring-1 ring-border p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -261,7 +302,7 @@ function SpotPage() {
 
               {/* Friend picker */}
               <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                {spot.friendsGoing.map((f) => {
+                {friendsGoing.map((f) => {
                   const picked = pickedFriends.includes(f.id);
                   return (
                     <button

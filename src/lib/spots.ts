@@ -19,16 +19,33 @@ export type Vibe = "Hype" | "Chill" | "Romantic" | "Wild" | "Creative";
 export type CapacityStatus = "Empty" | "Filling Up" | "Almost Full" | "Full";
 
 export type City =
-  | "Joburg"
+  | "Johannesburg"
   | "Pretoria"
-  | "Sandton"
-  | "Soweto"
   | "Cape Town"
   | "Stellenbosch"
   | "Durban"
   | "Gqeberha"
   | "Bloemfontein"
-  | "Polokwane";
+  | "Polokwane"
+  | "Knysna"
+  | "East London"
+  | "Hermanus"
+  | "Mbombela";
+
+/** Display labels for city chips → maps to DB city values used in queries. */
+export const CITY_LABELS: Record<string, string> = {
+  "Joburg": "Johannesburg",
+  "Johannesburg": "Johannesburg",
+  "Pretoria": "Pretoria",
+  "Cape Town": "Cape Town",
+  "Stellenbosch": "Stellenbosch",
+  "Durban": "Durban",
+  "Gqeberha": "Gqeberha",
+  "Bloemfontein": "Bloemfontein",
+  "Polokwane": "Polokwane",
+  "Knysna": "Knysna",
+  "East London": "East London",
+};
 
 export const CATEGORIES: Category[] = [
   "Nightlife",
@@ -41,17 +58,18 @@ export const CATEGORIES: Category[] = [
   "Community",
 ];
 
-export const CITIES: City[] = [
+/** Display names shown in city chips. */
+export const CITIES: string[] = [
   "Joburg",
   "Pretoria",
-  "Sandton",
-  "Soweto",
   "Cape Town",
   "Stellenbosch",
   "Durban",
   "Gqeberha",
   "Bloemfontein",
   "Polokwane",
+  "Knysna",
+  "East London",
 ];
 
 export interface Friend {
@@ -66,10 +84,10 @@ export interface Spot {
   name: string;
   tagline: string;
   description: string;
-  category: Category;
+  category: string;
   subcategory: string;
   vibes: Vibe[];
-  city: City;
+  city: string;
   area: string;
   date: string; // ISO
   doors: string;
@@ -102,7 +120,7 @@ const friends: Friend[] = [
 
 // Pick the best of the 6 bundled images by category + vibe.
 // Replace these per-venue with real photos via scripts/generate-spot-images.mjs (Nano Banana).
-function imageFor(category: Category, vibes: Vibe[]): string {
+function imageFor(category: string, vibes: Vibe[]): string {
   if (category === "Nightlife") {
     if (vibes.includes("Wild")) return techno;
     if (vibes.includes("Romantic") || vibes.includes("Chill")) return rooftop;
@@ -965,6 +983,7 @@ export const spots: Spot[] = [
 ];
 
 export function capacityStatus(s: Spot): CapacityStatus {
+  if (!s.capacityMax || s.capacityMax <= 0) return "Empty";
   const r = s.capacityBooked / s.capacityMax;
   if (r >= 1) return "Full";
   if (r >= 0.85) return "Almost Full";
@@ -992,7 +1011,7 @@ export function hostSlug(name: string) {
 export interface Host {
   slug: string;
   name: string;
-  city: City;
+  city: string;
   area: string;
   events: Spot[];
   followers: number;

@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ticket, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { getBookings, useStore } from "@/lib/store";
-import { getSpot, formatDate, formatTime, formatPrice } from "@/lib/spots";
+import { useMyBookings, type BookingView } from "@/lib/bookings-api";
+import { formatDate, formatTime, formatPrice } from "@/lib/spots";
 
 export const Route = createFileRoute("/tickets")({
   head: () => ({ meta: [{ title: "My Tickets — TROVE" }] }),
@@ -10,12 +10,9 @@ export const Route = createFileRoute("/tickets")({
 });
 
 function TicketsPage() {
-  const bookings = useStore(() => getBookings());
+  const { data: bookings = [], isLoading } = useMyBookings();
   const now = Date.now();
-  const upcoming = bookings.filter((b) => {
-    const s = getSpot(b.spotId);
-    return s && new Date(s.date).getTime() >= now;
-  });
+  const upcoming = bookings.filter((b) => b.spot && new Date(b.spot.date).getTime() >= now);
   const past = bookings.filter((b) => !upcoming.includes(b));
 
   return (
@@ -25,7 +22,15 @@ function TicketsPage() {
         <p className="text-xs text-muted-foreground">{bookings.length} bookings</p>
       </header>
       <main className="px-5 pt-5 space-y-6">
-        {bookings.length === 0 && (
+        {isLoading && (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div key={i} className="h-[88px] w-full animate-pulse rounded-2xl bg-surface" />
+            ))}
+          </div>
+        )}
+
+        {!isLoading && bookings.length === 0 && (
           <div className="py-20 text-center">
             <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-surface ring-1 ring-border">
               <Ticket className="h-7 w-7 text-muted-foreground" />
@@ -40,12 +45,12 @@ function TicketsPage() {
 
         {upcoming.length > 0 && (
           <Section title="Upcoming">
-            {upcoming.map((b) => <BookingRow key={b.id} bookingId={b.id} spotId={b.spotId} qty={b.qty} total={b.total} ticketCode={b.ticketCode} />)}
+            {upcoming.map((b) => <BookingRow key={b.id} booking={b} />)}
           </Section>
         )}
         {past.length > 0 && (
           <Section title="Past">
-            {past.map((b) => <BookingRow key={b.id} bookingId={b.id} spotId={b.spotId} qty={b.qty} total={b.total} ticketCode={b.ticketCode} dim />)}
+            {past.map((b) => <BookingRow key={b.id} booking={b} dim />)}
           </Section>
         )}
       </main>
@@ -62,16 +67,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function BookingRow({ bookingId, spotId, qty, total, dim }: { bookingId: string; spotId: string; qty: number; total: number; ticketCode: string; dim?: boolean }) {
-  const spot = getSpot(spotId);
-  const bookings = useStore(() => getBookings());
-  const booking = bookings.find((b) => b.id === bookingId);
-  if (!spot || !booking) return null;
+function BookingRow({ booking, dim }: { booking: BookingView; dim?: boolean }) {
+  const spot = booking.spot;
+  if (!spot) return null;
   const cancelled = booking.status === "cancelled" || booking.status === "refunded";
   const refundPending = booking.status === "refund_pending";
   return (
     <Link
-      to="/booking/$id" params={{ id: bookingId }}
+      to="/booking/$id" params={{ id: booking.id }}
       className={`flex items-center gap-3 rounded-2xl bg-surface ring-1 ring-border p-3 transition hover:ring-primary/40 ${dim || cancelled ? "opacity-60" : ""}`}
     >
       <img
@@ -89,11 +92,11 @@ function BookingRow({ bookingId, spotId, qty, total, dim }: { bookingId: string;
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-[10px] uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
-          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">Refunded</span>}
+          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">Cancelled</span>}
           {refundPending && <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-warning">Refund pending</span>}
         </div>
         <p className="font-display text-base truncate">{spot.name}</p>
-        <p className="text-xs text-muted-foreground">{qty} × · {formatPrice(total)}</p>
+        <p className="text-xs text-muted-foreground">{booking.qty} × · {formatPrice(booking.total)}</p>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
     </Link>

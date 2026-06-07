@@ -27,6 +27,16 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// The shared Supabase project's Site URL points at the engine, so the guest app
+// MUST pin its own redirect target — otherwise confirmation emails bounce users
+// to the engine. Use the configured public URL in production, origin in dev.
+const PUBLIC_SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/$/, "");
+function guestAppUrl(): string {
+  if (PUBLIC_SITE_URL) return PUBLIC_SITE_URL;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "https://trove-your-next-adventure.pages.dev";
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -121,7 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
+        // Land back in the guest app's onboarding after verifying (not the engine).
+        emailRedirectTo: `${guestAppUrl()}/onboarding?verified=1`,
       },
     });
     return { error: error?.message ?? null };
@@ -129,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${guestAppUrl()}/reset-password`,
     });
     return { error: error?.message ?? null };
   };

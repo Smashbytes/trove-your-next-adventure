@@ -1,7 +1,9 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { AuthModal } from "@/components/AuthModal";
+import { queryClient } from "@/lib/query-client";
 
 import appCss from "../styles.css?url";
 
@@ -78,8 +80,10 @@ function AppWithAuth() {
 
 function RootComponent() {
   return (
-    <AuthProvider>
-      <AppWithAuth />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppWithAuth />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

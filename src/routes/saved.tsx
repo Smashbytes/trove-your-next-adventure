@@ -2,8 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heart } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SpotCard } from "@/components/SpotCard";
-import { spots } from "@/lib/spots";
-import { getSaved, useStore } from "@/lib/store";
+import { useSpotsByIds } from "@/lib/listings-api";
+import { useSavedIds } from "@/lib/social";
 
 export const Route = createFileRoute("/saved")({
   head: () => ({ meta: [{ title: "Saved — TROVE" }] }),
@@ -11,8 +11,8 @@ export const Route = createFileRoute("/saved")({
 });
 
 function SavedPage() {
-  const ids = useStore(() => getSaved());
-  const saved = spots.filter((s) => ids.includes(s.id));
+  const { data: ids = [] } = useSavedIds();
+  const { data: saved = [] } = useSpotsByIds(ids);
 
   return (
     <AppShell>

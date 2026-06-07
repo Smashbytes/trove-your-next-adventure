@@ -5,10 +5,11 @@ import {
   Loader2, AlertTriangle, Lock, ChevronRight, Check,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { formatPrice, formatDate, formatTime, getSpot } from "@/lib/spots";
-import {
-  addBooking, clearCheckoutIntent, getCheckoutIntent, type CheckoutIntent,
-} from "@/lib/store";
+import { formatPrice, formatDate, formatTime } from "@/lib/spots";
+import { useIsDemo, useListing } from "@/lib/listings-api";
+import { useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
+import { clearCheckoutIntent, getCheckoutIntent, type CheckoutIntent } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/checkout/$id")({
   head: () => ({ meta: [{ title: "Checkout — TROVE" }] }),
@@ -21,7 +22,11 @@ type PayMethod = "card" | "eft" | "wallet";
 function CheckoutPage() {
   const { id } = useParams({ from: "/checkout/$id" });
   const navigate = useNavigate();
-  const spot = getSpot(id);
+  const { data: spot, isLoading } = useListing(id);
+  const demo = useIsDemo();
+  const createBooking = useCreateBooking();
+  const initPayment = useInitializePayment();
+  const { isAuthenticated, openAuthModal, profile, user } = useAuth();
 
   const [intent, setIntent] = useState<CheckoutIntent | null>(null);
   const [step, setStep] = useState<Step>("details");
@@ -48,7 +53,15 @@ function CheckoutPage() {
     }
   }, [id, spot]);
 
+  // Prefill buyer details from the signed-in account.
+  useEffect(() => {
+    if (profile?.full_name) setName((n) => n || profile.full_name!);
+    if (user?.email) setEmail((e) => e || user.email!);
+  }, [profile?.full_name, user?.email]);
+
+  if (isLoading) return <div className="p-10 text-center text-muted-foreground">Loading…</div>;
   if (!spot) return <div className="p-10 text-center">Spot not found.</div>;
+  if (!isAuthenticated) return <AuthRequired onSignIn={openAuthModal} spotId={id} />;
   if (!intent) return <div className="p-10 text-center text-muted-foreground">Loading checkout…</div>;
 
   const detailsValid =
@@ -60,31 +73,38 @@ function CheckoutPage() {
     method !== "card" ||
     (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3);
 
-  function processPayment() {
+  async function processPayment() {
     if (!spot || !intent) return;
     setErrorMsg(null);
     setStep("processing");
-    const last4 = cardNumber.replace(/\s/g, "").slice(-4);
-    const willFail = method === "card" && last4 === "0000";
-    setTimeout(() => {
-      if (willFail) {
-        setErrorMsg("Your card was declined. Try another card or method.");
-        setStep("failed");
+    try {
+      // Paid live listings go through Paystack (test mode); demo + free use the
+      // direct booking path.
+      if (!demo && intent.total > 0) {
+        const { authorizationUrl } = await initPayment.mutateAsync({
+          listingId: spot.id,
+          qty: intent.qty,
+          attestedAge: true,
+        });
+        clearCheckoutIntent();
+        window.location.href = authorizationUrl;
         return;
       }
-      const booking = addBooking({
-        spotId: spot.id,
+      const { bookingId } = await createBooking.mutateAsync({
+        listingId: spot.id,
         qty: intent.qty,
         total: intent.total,
-        split: intent.split,
-        status: "confirmed",
+        attestedAge: true,
         buyer: { name, email, phone },
         paymentMethod: method,
-        paymentRef: `mock_${Math.random().toString(36).slice(2, 10)}`,
+        split: intent.split,
       });
       clearCheckoutIntent();
-      navigate({ to: "/booking/$id", params: { id: booking.id } });
-    }, 1800);
+      navigate({ to: "/booking/$id", params: { id: bookingId } });
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "We couldn't complete your booking.");
+      setStep("failed");
+    }
   }
 
   return (
@@ -335,6 +355,44 @@ function CheckoutPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AuthRequired({ onSignIn, spotId }: { onSignIn: () => void; spotId: string }) {
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col">
+      <header className="sticky top-0 z-30 glass-strong px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
+        <div className="flex items-center justify-between">
+          <Link to="/spot/$id" params={{ id: spotId }} className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <h1 className="font-display text-base">Checkout</h1>
+          <span className="w-10" />
+        </div>
+      </header>
+
+      <main className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-brand shadow-glow">
+          <Lock className="h-7 w-7 text-primary-foreground" />
+        </div>
+        <h2 className="mt-5 font-display text-2xl">Sign in to book</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You need a TROVE account to secure your spot. Your ticket and QR code get tied to it — and we'll keep your selection.
+        </p>
+        <button
+          onClick={onSignIn}
+          className="mt-6 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow active:scale-[0.98] transition"
+        >
+          Sign in
+        </button>
+        <Link
+          to="/onboarding"
+          className="mt-3 w-full rounded-full bg-surface py-3 text-sm font-semibold text-foreground ring-1 ring-border active:scale-[0.98] transition"
+        >
+          Create your account
+        </Link>
+      </main>
     </div>
   );
 }

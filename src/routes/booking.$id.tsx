@@ -1,9 +1,12 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw } from "lucide-react";
-import { cancelBooking, getBooking, markSplitPaid, useStore } from "@/lib/store";
-import { formatDate, formatPrice, formatTime, getSpot } from "@/lib/spots";
+import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star } from "lucide-react";
+import { toast } from "sonner";
+import { useBooking, useCancelBooking, useMarkSplitPaid } from "@/lib/bookings-api";
+import { useIsDemo } from "@/lib/listings-api";
+import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
+import { formatDate, formatPrice, formatTime } from "@/lib/spots";
 import { useState } from "react";
 
 export const Route = createFileRoute("/booking/$id")({
@@ -13,9 +16,24 @@ export const Route = createFileRoute("/booking/$id")({
 
 function BookingPage() {
   const { id } = useParams({ from: "/booking/$id" });
-  const booking = useStore(() => getBooking(id));
-  const spot = booking ? getSpot(booking.spotId) : null;
+  const { data: booking, isLoading } = useBooking(id);
+  const cancel = useCancelBooking();
+  const markPaid = useMarkSplitPaid();
+  const demo = useIsDemo();
+  const { data: existingReview } = useBookingReview(id);
+  const submitReview = useSubmitReview();
+  const spot = booking?.spot ?? null;
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [reviewBody, setReviewBody] = useState("");
+
+  if (isLoading) {
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   if (!booking || !spot) {
     return (
@@ -32,6 +50,7 @@ function BookingPage() {
 
   const isCancelled = booking.status === "cancelled" || booking.status === "refunded";
   const isRefundPending = booking.status === "refund_pending";
+  const isPending = booking.status === "pending";
   const isActive = booking.status === "confirmed";
 
   return (
@@ -52,6 +71,16 @@ function BookingPage() {
             <h1 className="mt-4 font-display text-3xl">You're in.</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Confirmation sent to {booking.buyer?.email ?? "your email"}
+            </p>
+          </>
+        ) : isPending ? (
+          <>
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-warning/15">
+              <RotateCcw className="h-8 w-8 animate-spin text-warning" />
+            </div>
+            <h1 className="mt-4 font-display text-3xl">Confirming payment…</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This updates automatically once Paystack confirms your payment.
             </p>
           </>
         ) : isRefundPending ? (
@@ -126,6 +155,7 @@ function BookingPage() {
           <p className="mt-3 text-center font-mono text-xs tracking-widest text-muted-foreground">{booking.ticketCode}</p>
           <p className="mt-1 text-center text-[11px] text-muted-foreground">
             {isActive ? `Show at entry · Total ${formatPrice(booking.total)}` :
+              isPending ? "Awaiting payment confirmation…" :
               isRefundPending ? "Ticket invalidated · Refund processing" : "Ticket cancelled"}
           </p>
           {booking.paymentRef && (
@@ -200,7 +230,7 @@ function BookingPage() {
                   </span>
                 ) : (
                   <button
-                    onClick={() => markSplitPaid(booking.id, p.friendId)}
+                    onClick={() => markPaid.mutate({ bookingId: booking.id, friendId: p.friendId })}
                     className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
                       p.paid
                         ? "bg-success/15 text-success"
@@ -243,7 +273,7 @@ function BookingPage() {
                   Keep it
                 </button>
                 <button
-                  onClick={() => { cancelBooking(booking.id); setConfirmCancel(false); }}
+                  onClick={() => { cancel.mutate(booking.id); setConfirmCancel(false); }}
                   className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground"
                 >
                   Confirm cancel
@@ -260,6 +290,54 @@ function BookingPage() {
             Refund of <span className="font-semibold text-foreground">{formatPrice(booking.total)}</span> is processing…
           </p>
         </div>
+      )}
+
+      {/* Review (live confirmed bookings only) */}
+      {isActive && !demo && (
+        <section className="mt-6 rounded-2xl bg-surface ring-1 ring-border p-5">
+          <h3 className="font-display text-lg">Rate your experience</h3>
+          {existingReview ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              You rated this {existingReview.rating}★. Thanks for the feedback!
+            </p>
+          ) : (
+            <>
+              <div className="mt-3 flex gap-1.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}>
+                    <Star className={`h-7 w-7 ${n <= rating ? "fill-warning text-warning" : "text-muted-foreground"}`} />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={reviewBody}
+                onChange={(e) => setReviewBody(e.target.value)}
+                placeholder="How was it? (optional)"
+                rows={3}
+                className="mt-3 w-full rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
+              />
+              <button
+                disabled={submitReview.isPending}
+                onClick={async () => {
+                  try {
+                    await submitReview.mutateAsync({
+                      bookingId: booking.id,
+                      listingId: booking.listingId,
+                      rating,
+                      body: reviewBody,
+                    });
+                    toast.success("Review posted — thank you!");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Couldn't post review.");
+                  }
+                }}
+                className="mt-3 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+              >
+                Post review
+              </button>
+            </>
+          )}
+        </section>
       )}
 
       <Link

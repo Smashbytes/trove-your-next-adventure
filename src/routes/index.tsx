@@ -1,18 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { Bell, Plus, Search, Flame, Sparkles, ChevronRight } from "lucide-react";
+import { Bell, Plus, Search, ChevronRight, Users2, MapPin, Navigation } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Logo } from "@/components/Logo";
 import { SpotCard } from "@/components/SpotCard";
-import {
-  spots,
-  CATEGORIES,
-  CITIES,
-  editorsPicks,
-  type Category,
-  type City,
-} from "@/lib/spots";
+import { FeaturedRotator } from "@/components/FeaturedRotator";
+import { CITIES } from "@/lib/spots";
+import { useEditorsPicks, useListings, useTopLevelCategories } from "@/lib/listings-api";
+import { getGuestPrefs } from "@/lib/guest-prefs";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -25,35 +22,60 @@ export const Route = createFileRoute("/")({
 });
 
 const tabs = ["For You", "With Friends", "Trending"] as const;
-const categories: Array<"All" | Category> = ["All", ...CATEGORIES];
-const cityFilters: Array<"All" | City> = ["All", ...CITIES];
+const cityFilters: string[] = ["All", ...CITIES];
 
 function Discover() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("For You");
-  const [activeCat, setActiveCat] = useState<"All" | Category>("All");
-  const [activeCity, setActiveCity] = useState<"All" | City>("All");
+  const [activeCat, setActiveCat] = useState<string>("All");
+  // Default to the city chosen during onboarding, when it's one we filter on.
+  const [activeCity, setActiveCity] = useState<string>(() => {
+    const c = getGuestPrefs().city;
+    return c && (CITIES as string[]).includes(c) ? c : "All";
+  });
 
-  const stories = useMemo(() => spots.slice(0, 8), []);
-  const picks = useMemo(() => editorsPicks(), []);
+  const { names: catNames } = useTopLevelCategories();
+  const categories = useMemo<string[]>(() => ["All", ...catNames], [catNames]);
 
-  const filtered = useMemo(() => {
-    let r = spots;
-    if (activeCat !== "All") r = r.filter((s) => s.category === activeCat);
-    if (activeCity !== "All") r = r.filter((s) => s.city === activeCity);
-    return r;
-  }, [activeCat, activeCity]);
+  const { data: listings = [], isLoading } = useListings({
+    category: activeCat,
+    city: activeCity,
+  });
+
+  const stories = useMemo(() => listings.slice(0, 8), [listings]);
+  const { data: picks = [] } = useEditorsPicks();
+  // Hero rotation: the TROVE team's curated "Featured" set when it exists, else
+  // fall back to the freshest live listing so the hero is never an empty box.
+  const rotation = useMemo(
+    () => (picks.length ? picks : listings.slice(0, 1)),
+    [picks, listings],
+  );
 
   const feed = useMemo(() => {
     if (tab === "Trending")
-      return [...filtered].sort(
-        (a, b) => b.capacityBooked / b.capacityMax - a.capacityBooked / a.capacityMax,
+      return [...listings].sort(
+        (a, b) =>
+          (b.capacityMax ? b.capacityBooked / b.capacityMax : 0) -
+          (a.capacityMax ? a.capacityBooked / a.capacityMax : 0),
       );
-    if (tab === "With Friends") return filtered.filter((s) => s.friendsGoing.length > 0);
-    return filtered;
-  }, [tab, filtered]);
+    if (tab === "With Friends") return listings.filter((s) => s.friendsGoing.length > 0);
+    return listings;
+  }, [tab, listings]);
 
-  const heroCity = activeCity === "All" ? "South Africa" : activeCity;
-  const heroCount = feed.length;
+  const { isAuthenticated, profile } = useAuth();
+
+  const timeGreeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  const firstName = profile?.full_name?.split(" ")[0] ?? "you";
+
+  const displayCity = useMemo(() => {
+    if (activeCity !== "All") return activeCity;
+    return getGuestPrefs().city ?? "South Africa";
+  }, [activeCity]);
 
   return (
     <AppShell>
@@ -132,25 +154,59 @@ function Discover() {
           </div>
         </section>
 
-        {/* Hero strip — bold editorial */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-          className="relative overflow-hidden rounded-3xl bg-gradient-soft p-5 ring-1 ring-primary/30"
-        >
-          <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
-          <div className="absolute -bottom-10 -left-6 h-32 w-32 rounded-full bg-accent/20 blur-3xl" />
-          <div className="relative">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-primary inline-flex items-center gap-1.5">
-              <Flame className="h-3 w-3" /> {heroCount} spots in {heroCity}
-            </p>
-            <h1 className="mt-1.5 font-display text-[2rem] leading-[0.95]">
-              Decide. <span className="text-gradient">Book.</span> Show up.
-            </h1>
-            <p className="mt-2 text-[13px] font-medium text-muted-foreground">
-              Nightlife, food, music, adventure, wellness, arts, family & community — sorted in 30 seconds.
-            </p>
-          </div>
-        </motion.section>
+        {/* Personalized greeting (logged in) */}
+        {isAuthenticated && (
+          <motion.section
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="flex items-center justify-between gap-3"
+          >
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-muted-foreground">{timeGreeting}</p>
+              <h1 className="font-display text-[2rem] leading-tight truncate">Hi, {firstName}!</h1>
+            </div>
+            <button
+              onClick={() => {
+                document.getElementById("city-filter")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
+              className="shrink-0 flex items-center gap-1.5 rounded-full bg-surface px-3.5 py-2 ring-1 ring-border text-xs font-medium transition active:scale-[0.97]"
+            >
+              <MapPin className="h-3 w-3 text-primary" />
+              {displayCity}
+            </button>
+          </motion.section>
+        )}
+
+        {/* Find nearby events (logged in) */}
+        {isAuthenticated && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.05 }}
+          >
+            <Link
+              to="/search"
+              className="group relative flex items-center gap-4 overflow-hidden rounded-3xl bg-gradient-soft p-4 ring-1 ring-border/60 transition active:scale-[0.99]"
+            >
+              {/* faint dotted texture, brand graphic element */}
+              <span className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-brand shadow-glow-soft">
+                <Navigation className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-base leading-tight">Find Nearby Events</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  What's on near you in {displayCity}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition group-active:translate-x-0.5" />
+            </Link>
+          </motion.div>
+        )}
+
+        {/* Featured rotator (logged out) — TROVE team's curated Top 5 */}
+        {!isAuthenticated && (
+          <section>
+            <FeaturedRotator items={rotation} />
+          </section>
+        )}
 
         {/* Category pills */}
         <section>
@@ -163,7 +219,7 @@ function Discover() {
                   onClick={() => setActiveCat(c)}
                   className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
                     isActive
-                      ? "bg-foreground text-background"
+                      ? "bg-gradient-brand text-primary-foreground shadow-glow-soft"
                       : "bg-surface ring-1 ring-border text-muted-foreground"
                   }`}
                 >
@@ -175,7 +231,7 @@ function Discover() {
         </section>
 
         {/* City chips */}
-        <section>
+        <section id="city-filter">
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
             {cityFilters.map((c) => {
               const isActive = activeCity === c;
@@ -185,7 +241,7 @@ function Discover() {
                   onClick={() => setActiveCity(c)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                     isActive
-                      ? "bg-gradient-brand text-primary-foreground shadow-glow-soft"
+                      ? "bg-primary/15 text-primary ring-1 ring-primary/30"
                       : "bg-surface/60 ring-1 ring-border/60 text-muted-foreground"
                   }`}
                 >
@@ -200,10 +256,7 @@ function Discover() {
         {picks.length > 0 && activeCat === "All" && activeCity === "All" && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg inline-flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Editor's Picks
-              </h2>
+              <h2 className="font-display text-lg">Editor's Picks</h2>
               <Link to="/search" className="inline-flex items-center text-[11px] text-muted-foreground hover:text-foreground">
                 See all <ChevronRight className="h-3 w-3" />
               </Link>
@@ -255,12 +308,28 @@ function Discover() {
             </h2>
             <p className="text-[11px] font-semibold text-muted-foreground">{feed.length} spots</p>
           </div>
-          {feed.map((s, i) => (
-            <SpotCard key={s.id} spot={s} index={i} />
-          ))}
-          {!feed.length && (
-            <div className="py-16 text-center text-sm text-muted-foreground">
-              Nothing here yet. Try a different city or category.
+          {isLoading &&
+            [0, 1, 2].map((i) => (
+              <div key={i} className="aspect-[4/5] w-full animate-pulse rounded-3xl bg-surface" />
+            ))}
+          {!isLoading && feed.map((s, i) => <SpotCard key={s.id} spot={s} index={i} />)}
+          {!isLoading && !feed.length && (
+            <div className="py-16 flex flex-col items-center gap-3 text-center">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-surface ring-1 ring-border">
+                {tab === "With Friends"
+                  ? <Users2 className="h-6 w-6 text-muted-foreground" />
+                  : <Search className="h-6 w-6 text-muted-foreground" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground/80">
+                  {tab === "With Friends" ? "No crew activity yet" : "Nothing found"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-[200px] mx-auto">
+                  {tab === "With Friends"
+                    ? "Invite friends to see where they're heading."
+                    : "Try a different city or category."}
+                </p>
+              </div>
             </div>
           )}
         </section>

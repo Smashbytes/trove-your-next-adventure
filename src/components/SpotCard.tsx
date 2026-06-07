@@ -7,9 +7,10 @@ import { formatDate, formatTime, formatPrice, hostSlug, type Spot } from "@/lib/
 export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
   return (
     <motion.article
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.45, ease: "easeOut" }}
+      whileHover={{ y: -2 }}
+      transition={{ delay: index * 0.06, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className="group relative overflow-hidden rounded-3xl bg-surface"
     >
       <Link to="/spot/$id" params={{ id: spot.id }} className="block">
