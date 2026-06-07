@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -31,7 +31,7 @@ const TOTAL = STEP_LABELS.length;
 
 function Onboarding() {
   const navigate = useNavigate();
-  const { signUpWithEmail, isAuthenticated, user, profile, refreshProfile, openAuthModal } = useAuth();
+  const { signUpWithEmail, verifyEmailOtp, isAuthenticated, user, profile, refreshProfile, openAuthModal } = useAuth();
 
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
@@ -44,6 +44,10 @@ function Onboarding() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // OTP PIN
+  const [pin, setPin] = useState(["", "", "", "", "", ""]);
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   // About / interests / location / notifs
   const [dob, setDob] = useState(prefs.dob ?? "");
   const [gender, setGender] = useState(prefs.gender ?? "");
@@ -51,8 +55,8 @@ function Onboarding() {
   const [city, setCity] = useState<string | null>(prefs.city);
   const [notifs, setNotifs] = useState(prefs.notifs);
 
-  // Once a session exists (e.g. returning from the email verification link, or
-  // cross-tab), jump past Welcome/Account/Verify into personalization.
+  // Once a session is established (OTP verified or cross-tab), jump past the
+  // verify step into personalization.
   useEffect(() => {
     if (isAuthenticated && step < 3) {
       setDir(1);
@@ -74,12 +78,61 @@ function Onboarding() {
     const { error } = await signUpWithEmail(email.trim(), password, fullName.trim());
     setBusy(false);
     if (error) return toast.error(error);
-    go(2); // Verify
+    setPin(["", "", "", "", "", ""]);
+    go(2);
+    // Auto-focus first PIN box after transition
+    setTimeout(() => pinRefs.current[0]?.focus(), 400);
   }
 
   async function resend() {
     const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
-    toast[error ? "error" : "success"](error ? error.message : "Verification email resent.");
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("New code sent — check your inbox.");
+      setPin(["", "", "", "", "", ""]);
+      setTimeout(() => pinRefs.current[0]?.focus(), 100);
+    }
+  }
+
+  function handlePinChange(index: number, value: string) {
+    const digit = value.replace(/\D/g, "").slice(-1);
+    const next = [...pin];
+    next[index] = digit;
+    setPin(next);
+    if (digit && index < 5) {
+      pinRefs.current[index + 1]?.focus();
+    }
+  }
+
+  function handlePinKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !pin[index] && index > 0) {
+      pinRefs.current[index - 1]?.focus();
+    }
+    if (e.key === "Enter") verifyPin();
+  }
+
+  function handlePinPaste(e: React.ClipboardEvent) {
+    e.preventDefault();
+    const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6).split("");
+    const next = [...digits, ...Array(6 - digits.length).fill("")];
+    setPin(next);
+    const focusIdx = Math.min(digits.length, 5);
+    setTimeout(() => pinRefs.current[focusIdx]?.focus(), 0);
+  }
+
+  async function verifyPin() {
+    const code = pin.join("");
+    if (code.length < 6) return toast.error("Enter the full 6-digit code.");
+    setBusy(true);
+    const { error } = await verifyEmailOtp(email.trim(), code);
+    setBusy(false);
+    if (error) {
+      toast.error("Invalid or expired code. Try resending.");
+      setPin(["", "", "", "", "", ""]);
+      pinRefs.current[0]?.focus();
+    }
+    // On success: auth state change fires → useEffect jumps to step 3.
   }
 
   async function saveAbout() {
@@ -187,21 +240,49 @@ function Onboarding() {
             )}
 
             {step === 2 && (
-              <StepShell eyebrow="Verify" title="Verify your email" subtitle="We've sent a verification link.">
-                <div className="flex flex-col items-center py-4 text-center">
-                  <div className="relative grid h-20 w-20 place-items-center rounded-full bg-gradient-soft ring-1 ring-primary/30">
-                    <Mail className="h-8 w-8 text-primary" />
-                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+              <StepShell eyebrow="Verify" title="Enter your code" subtitle={`We sent a 6-digit code to ${email}`}>
+                <div className="flex flex-col items-center gap-6 py-2">
+                  <div className="grid h-16 w-16 place-items-center rounded-full bg-gradient-soft ring-1 ring-primary/30">
+                    <Mail className="h-7 w-7 text-primary" />
                   </div>
-                  <p className="mt-5 text-sm text-muted-foreground">
-                    We sent a link to <span className="font-semibold text-foreground">{email}</span>.
-                    Tap it to confirm — this page updates automatically.
-                  </p>
-                  <div className="mt-4 inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for confirmation…
+
+                  {/* 6-box PIN input */}
+                  <div className="flex gap-2.5" onPaste={handlePinPaste}>
+                    {pin.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => { pinRefs.current[i] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handlePinChange(i, e.target.value)}
+                        onKeyDown={(e) => handlePinKeyDown(i, e)}
+                        className={`h-14 w-11 rounded-2xl bg-surface text-center text-xl font-bold ring-1 transition-all duration-150 focus:outline-none caret-transparent ${
+                          digit
+                            ? "ring-primary shadow-[0_0_12px_rgba(232,30,140,0.35)] text-foreground"
+                            : "ring-border text-muted-foreground"
+                        } focus:ring-primary`}
+                      />
+                    ))}
                   </div>
-                  <button onClick={resend} className="mt-6 text-sm font-semibold text-primary">Resend email</button>
-                  <button onClick={() => go(1)} className="mt-2 text-xs text-muted-foreground">Change email</button>
+
+                  <PrimaryButton onClick={verifyPin} busy={busy}>Verify code</PrimaryButton>
+
+                  <div className="flex flex-col items-center gap-1.5 text-center">
+                    <button
+                      onClick={resend}
+                      className="text-sm font-semibold text-primary active:opacity-60"
+                    >
+                      Resend code
+                    </button>
+                    <button
+                      onClick={() => go(1)}
+                      className="text-xs text-muted-foreground active:opacity-60"
+                    >
+                      Wrong email? Change it
+                    </button>
+                  </div>
                 </div>
               </StepShell>
             )}

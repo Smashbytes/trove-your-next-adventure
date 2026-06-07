@@ -20,6 +20,7 @@ interface AuthContextValue {
   closeAuthModal: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  verifyEmailOtp: (email: string, token: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -131,9 +132,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       options: {
         data: { full_name: fullName },
-        // Land back in the guest app's onboarding after verifying (not the engine).
+        // Fallback redirect in case user clicks a link instead of entering OTP.
         emailRedirectTo: `${guestAppUrl()}/onboarding?verified=1`,
       },
+    });
+    return { error: error?.message ?? null };
+  };
+
+  const verifyEmailOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'signup',
     });
     return { error: error?.message ?? null };
   };
@@ -167,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       closeAuthModal: () => setShowAuthModal(false),
       signInWithEmail,
       signUpWithEmail,
+      verifyEmailOtp,
       resetPassword,
       signOut,
       refreshProfile,
