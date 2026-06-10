@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ type View = 'signin' | 'forgot';
 
 export function AuthModal({ open, onClose }: { open: boolean; onClose?: () => void }) {
   const { signInWithEmail, resetPassword } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [view, setView] = useState<View>('signin');
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
@@ -22,8 +24,18 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose?: () => vo
     setBusy(true);
     const { error } = await signInWithEmail(email, password);
     setBusy(false);
-    if (error) toast.error(error);
-    else { toast.success('Welcome back!'); onClose?.(); }
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    toast.success('Welcome back!');
+    onClose?.();
+    // Land returning users on the home feed — never strand them on the page
+    // the modal happened to open over (e.g. profile). Checkout is the one
+    // exception: stay so the in-progress booking can complete.
+    if (!pathname.startsWith('/checkout')) {
+      navigate({ to: '/' });
+    }
   }
 
   async function handleResetPassword(e: React.FormEvent) {
