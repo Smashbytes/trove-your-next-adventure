@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check, Navigation } from "lucide-react";
+import { toast } from "sonner";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { FriendStack } from "@/components/FriendStack";
-import { SpotMap } from "@/components/SpotMap";
+import { SpotDetailDesktop } from "@/components/desktop/SpotDetailDesktop";
+import { openDirections } from "@/lib/maps";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
 import { useListing } from "@/lib/listings-api";
 import { useAuth } from "@/lib/auth";
@@ -93,8 +95,32 @@ function SpotPage() {
     setPickedFriends((cur) => (cur.includes(fid) ? cur.filter((x) => x !== fid) : [...cur, fid]));
   }
 
+  async function share() {
+    if (!spot) return;
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const data = {
+      title: spot.name,
+      text: `${spot.name} on TROVE — ${spot.tagline || "let's go"}`,
+      url,
+    };
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share(data);
+      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copied to clipboard");
+      }
+    } catch {
+      /* user dismissed the share sheet — no-op */
+    }
+  }
+
   return (
-    <div className="mx-auto min-h-dvh max-w-md pb-32">
+    <>
+      <div className="hidden lg:block">
+        <SpotDetailDesktop spot={spot} friendsGoing={friendsGoing} onShare={share} />
+      </div>
+      <div className="mx-auto min-h-dvh max-w-md pb-32 lg:hidden">
       {/* Hero image */}
       <div className="relative">
         <div className="relative h-[60vh] overflow-hidden">
@@ -118,7 +144,7 @@ function SpotPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex gap-2">
-            <button className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+            <button onClick={share} aria-label="Share" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
               <Share2 className="h-4 w-4" />
             </button>
             <button onClick={() => toggleSave.mutate(spot.id)} className="grid h-10 w-10 place-items-center rounded-full glass-strong">
@@ -190,7 +216,7 @@ function SpotPage() {
                 <p className="text-[11px] uppercase tracking-wider text-primary">Spark</p>
                 <h3 className="font-display text-lg mt-0.5">Your crew is going</h3>
               </div>
-              <button className="inline-flex items-center gap-1.5 rounded-full bg-foreground/10 px-3 py-1.5 text-xs font-medium">
+              <button onClick={share} className="inline-flex items-center gap-1.5 rounded-full bg-foreground/10 px-3 py-1.5 text-xs font-medium">
                 <Send className="h-3 w-3" /> Invite
               </button>
             </div>
@@ -216,27 +242,26 @@ function SpotPage() {
           </Link>
         </section>
 
-        {/* Map */}
+        {/* Location — opens the device's native map app for directions */}
         <section>
-          <div className="mb-3 flex items-end justify-between">
-            <div>
-              <h2 className="font-display text-xl">Where it's at</h2>
-              <p className="mt-1 text-xs text-muted-foreground">{spot.address}</p>
+          <h2 className="font-display text-xl mb-3">Where it's at</h2>
+          <button
+            onClick={() =>
+              openDirections({ lat: spot.lat, lng: spot.lng, label: spot.name, address: spot.address })
+            }
+            className="group flex w-full items-center gap-4 rounded-2xl bg-surface ring-1 ring-border p-4 text-left transition active:scale-[0.99] hover:ring-primary/40"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-soft ring-1 ring-primary/30">
+              <MapPin className="h-5 w-5 text-primary" />
             </div>
-            <a
-              href={`https://www.openstreetmap.org/?mlat=${spot.lat}&mlon=${spot.lng}#map=17/${spot.lat}/${spot.lng}`}
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-[11px] font-semibold"
-            >
-              <Navigation className="h-3 w-3" /> Directions
-            </a>
-          </div>
-          <SpotMap
-            points={[{ lat: spot.lat, lng: spot.lng, label: spot.name, sublabel: spot.area }]}
-            height={220}
-            zoom={15}
-          />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{spot.area || spot.city}</p>
+              <p className="truncate text-xs text-muted-foreground">{spot.address || "Tap for directions"}</p>
+            </div>
+            <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-brand px-3.5 py-2 text-[11px] font-bold text-primary-foreground shadow-glow-soft">
+              <Navigation className="h-3.5 w-3.5" /> Directions
+            </span>
+          </button>
         </section>
 
         {/* Split bill toggle */}
@@ -374,6 +399,7 @@ function SpotPage() {
           </div>
         </motion.div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

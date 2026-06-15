@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ticket, ChevronRight } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useMyBookings, type BookingView } from "@/lib/bookings-api";
 import { formatDate, formatTime, formatPrice } from "@/lib/spots";
 
@@ -16,12 +16,9 @@ function TicketsPage() {
   const past = bookings.filter((b) => !upcoming.includes(b));
 
   return (
-    <AppShell>
-      <header className="sticky top-0 z-30 glass-strong px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
-        <h1 className="font-display text-2xl">My Tickets</h1>
-        <p className="text-xs text-muted-foreground">{bookings.length} bookings</p>
-      </header>
-      <main className="px-5 pt-5 space-y-6">
+    <ResponsiveShell title="My Tickets">
+      <p className="mb-4 text-xs text-muted-foreground">{bookings.length} bookings</p>
+      <div className="space-y-6">
         {isLoading && (
           <div className="space-y-3">
             {[0, 1].map((i) => (
@@ -53,8 +50,8 @@ function TicketsPage() {
             {past.map((b) => <BookingRow key={b.id} booking={b} dim />)}
           </Section>
         )}
-      </main>
-    </AppShell>
+      </div>
+    </ResponsiveShell>
   );
 }
 

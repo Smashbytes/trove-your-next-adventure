@@ -11,7 +11,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
-import { useIsDemo } from "./listings-api";
+import { useIsDemo, prettifySlug } from "./listings-api";
 import {
   getSaved,
   toggleSaved as toggleSavedLocal,
@@ -141,6 +141,42 @@ export function useToggleFollow() {
       if ((e as Error).message !== "auth-required") {
         qc.invalidateQueries({ queryKey: ["follows"] });
       }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Followed hosts (resolved to display details for "My Spots")
+// ---------------------------------------------------------------------------
+
+export interface FollowedHost {
+  userId: string;
+  slug: string;
+  name: string;
+  city: string | null;
+  verified: boolean;
+  heroUrl: string | null;
+}
+
+export function useFollowedHosts() {
+  const { data: ids = [] } = useFollowedIds();
+  return useQuery<FollowedHost[]>({
+    queryKey: ["followed-hosts", [...ids].sort()],
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("host_profiles")
+        .select("user_id, slug, city, verified, hero_url")
+        .in("user_id", ids);
+      if (error) throw error;
+      return (data ?? []).map((h) => ({
+        userId: h.user_id,
+        slug: h.slug,
+        name: prettifySlug(h.slug),
+        city: h.city,
+        verified: !!h.verified,
+        heroUrl: h.hero_url,
+      }));
     },
   });
 }

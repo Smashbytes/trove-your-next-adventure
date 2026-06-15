@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { Bell, Plus, Search, ChevronRight, Users2, MapPin, Navigation } from "lucide-react";
+import { Bell, UserPlus, Search, ChevronRight, Users2, MapPin, Navigation } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { DiscoverDesktop } from "@/components/desktop/DiscoverDesktop";
 import { Logo } from "@/components/Logo";
 import { SpotCard } from "@/components/SpotCard";
 import { FeaturedRotator } from "@/components/FeaturedRotator";
 import { CITIES } from "@/lib/spots";
 import { useEditorsPicks, useListings, useTopLevelCategories } from "@/lib/listings-api";
+import { useFriends } from "@/lib/friends-api";
+import { useUnreadCount } from "@/lib/notifications-api";
 import { getGuestPrefs } from "@/lib/guest-prefs";
 import { useAuth } from "@/lib/auth";
 
@@ -24,7 +27,25 @@ export const Route = createFileRoute("/")({
 const tabs = ["For You", "With Friends", "Trending"] as const;
 const cityFilters: string[] = ["All", ...CITIES];
 
+/**
+ * Route entry. CSS-based responsive switch (SSR-safe, no hydration flash):
+ * the phone feed renders below `lg`, the full desktop dashboard at `lg`+.
+ * React Query dedupes the shared data fetches across both trees.
+ */
 function Discover() {
+  return (
+    <>
+      <div className="lg:hidden">
+        <MobileDiscover />
+      </div>
+      <div className="hidden lg:block">
+        <DiscoverDesktop />
+      </div>
+    </>
+  );
+}
+
+function MobileDiscover() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("For You");
   const [activeCat, setActiveCat] = useState<string>("All");
   // Default to the city chosen during onboarding, when it's one we filter on.
@@ -41,7 +62,12 @@ function Discover() {
     city: activeCity,
   });
 
-  const stories = useMemo(() => listings.slice(0, 8), [listings]);
+  const { data: friends = [] } = useFriends();
+  const unreadCount = useUnreadCount();
+  const acceptedFriends = useMemo(
+    () => friends.filter((f) => f.status === "accepted"),
+    [friends],
+  );
   const { data: picks = [] } = useEditorsPicks();
   // Hero rotation: the TROVE team's curated "Featured" set when it exists, else
   // fall back to the freshest live listing so the hero is never an empty box.
@@ -87,10 +113,14 @@ function Discover() {
             <Link to="/search" className="grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
               <Search className="h-4 w-4" />
             </Link>
-            <button className="relative grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
+            <Link to="/notifications" aria-label="Notifications" className="relative grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
               <Bell className="h-4 w-4" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary shadow-glow" />
-            </button>
+              {isAuthenticated && unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-glow">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Link>
           </div>
         </div>
 
@@ -118,41 +148,47 @@ function Discover() {
       </header>
 
       <main className="px-5 pt-4 space-y-5">
-        {/* Stories rail with Add */}
-        <section>
-          <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar -mx-5 px-5">
-            <button className="snap-start shrink-0 flex flex-col items-center gap-1.5">
-              <div className="grid h-[68px] w-[68px] place-items-center rounded-2xl bg-surface ring-1 ring-dashed ring-primary/40">
-                <Plus className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-[10px] text-muted-foreground">Host</p>
-            </button>
-            {stories.map((s) => (
-              <Link key={s.id} to="/spot/$id" params={{ id: s.id }} className="shrink-0 flex flex-col items-center gap-1.5">
-                <div className="relative h-[68px] w-[68px] rounded-2xl overflow-hidden p-[2px] bg-gradient-brand">
-                  <div className="h-full w-full overflow-hidden rounded-[14px]">
-                    <img
-                      src={s.image}
-                      alt={s.name}
-                      loading="lazy"
-                      data-fallback={s.imageFallback}
-                      onError={(e) => {
-                        const t = e.currentTarget;
-                        const fb = t.dataset.fallback;
-                        if (fb && t.src !== fb) t.src = fb;
-                      }}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-background px-1.5 py-0.5 text-[9px] font-bold text-primary ring-1 ring-primary/40">
-                    LIVE
-                  </span>
+        {/* Friends strip — quick view of your crew + add/look up */}
+        {isAuthenticated && (
+          <section>
+            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar -mx-5 px-5">
+              <Link to="/profile" className="snap-start shrink-0 flex flex-col items-center gap-1.5">
+                <div className="grid h-[60px] w-[60px] place-items-center rounded-full bg-surface ring-1 ring-dashed ring-primary/40">
+                  <UserPlus className="h-5 w-5 text-primary" />
                 </div>
-                <p className="max-w-[68px] truncate text-[10px] text-center">{s.name.split(" ")[0]}</p>
+                <p className="text-[10px] text-muted-foreground">Add</p>
               </Link>
-            ))}
-          </div>
-        </section>
+              {acceptedFriends.map((f) => (
+                <Link
+                  key={f.friendId}
+                  to="/profile"
+                  className="shrink-0 flex flex-col items-center gap-1.5"
+                >
+                  <div className="h-[60px] w-[60px] rounded-full p-[2px] bg-gradient-brand">
+                    <div className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-background font-display text-lg">
+                      {f.avatarUrl ? (
+                        <img src={f.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        f.name.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                  </div>
+                  <p className="max-w-[60px] truncate text-[10px] text-center">
+                    {f.name.split(" ")[0]}
+                  </p>
+                </Link>
+              ))}
+              {acceptedFriends.length === 0 && (
+                <Link
+                  to="/profile"
+                  className="flex flex-1 items-center rounded-2xl bg-surface/60 px-4 py-3 text-xs text-muted-foreground ring-1 ring-border/60"
+                >
+                  Add friends to see who's going out with you →
+                </Link>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Personalized greeting (logged in) */}
         {isAuthenticated && (

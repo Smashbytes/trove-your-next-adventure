@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { SpotCard } from "@/components/SpotCard";
 import { CITIES, type Vibe } from "@/lib/spots";
 import { useListings, useTopLevelCategories } from "@/lib/listings-api";
@@ -49,9 +49,8 @@ function SearchPage() {
   const activeFilterCount = (vibe ? 1 : 0) + (cat ? 1 : 0) + (city ? 1 : 0) + (maxPrice < 7000 ? 1 : 0);
 
   return (
-    <AppShell>
-      <header className="sticky top-0 z-30 glass-strong px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-4 space-y-3">
-        <h1 className="font-display text-2xl">Search</h1>
+    <ResponsiveShell title="Search" maxWidth="max-w-[1040px]">
+      <div className="space-y-3">
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -75,7 +74,7 @@ function SearchPage() {
         </div>
 
         {/* Category chips */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setCat(null)}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -97,7 +96,7 @@ function SearchPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {SORTS.map((s) => (
             <button
               key={s}
@@ -110,21 +109,21 @@ function SearchPage() {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
-      <main className="px-5 pt-5 space-y-4">
-        <p className="text-xs font-semibold text-muted-foreground">{results.length} spots</p>
+      <p className="mt-5 mb-4 text-xs font-semibold text-muted-foreground">{results.length} spots</p>
+      <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0 xl:grid-cols-3">
         {isLoading &&
           [0, 1].map((i) => (
             <div key={i} className="aspect-[4/5] w-full animate-pulse rounded-3xl bg-surface" />
           ))}
         {!isLoading && results.map((s, i) => <SpotCard key={s.id} spot={s} index={i} />)}
-        {!isLoading && !results.length && (
-          <div className="py-16 text-center text-sm text-muted-foreground">
-            No spots match. Loosen the filters?
-          </div>
-        )}
-      </main>
+      </div>
+      {!isLoading && !results.length && (
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          No spots match. Loosen the filters?
+        </div>
+      )}
 
       {openFilters && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setOpenFilters(false)}>
@@ -209,6 +208,6 @@ function SearchPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </ResponsiveShell>
   );
 }

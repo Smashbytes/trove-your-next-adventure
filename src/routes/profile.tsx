@@ -1,20 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { LogOut, Settings, UserPlus, Check, X, Pencil } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import {
+  LogOut,
+  Settings,
+  Check,
+  Pencil,
+  Camera,
+  Ticket,
+  Heart,
+  Bell,
+  LifeBuoy,
+  ChevronRight,
+} from "lucide-react";
+import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
+import { FriendsManager } from "@/components/FriendsManager";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useMyBookings } from "@/lib/bookings-api";
 import { useSavedIds } from "@/lib/social";
-import {
-  useFriends,
-  useAddFriend,
-  useRespondFriend,
-  useRemoveFriend,
-  type FriendRow,
-} from "@/lib/friends-api";
+import { useFriends } from "@/lib/friends-api";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({ meta: [{ title: "Profile — TROVE" }] }),
@@ -28,15 +34,17 @@ function ProfilePage() {
   const { data: friends = [] } = useFriends();
 
   const accepted = friends.filter((f) => f.status === "accepted");
-  const incoming = friends.filter((f) => f.status === "pending" && !f.requestedByMe);
 
   const displayName = profile?.full_name?.trim() || user?.email?.split("@")[0] || "Guest";
   const initial = displayName.charAt(0).toUpperCase();
   const memberYear = profile?.created_at ? new Date(profile.created_at).getFullYear() : null;
+  const avatarUrl = profile?.avatar_url ?? null;
 
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState(displayName);
   const [savingName, setSavingName] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   async function saveName() {
     if (!user || nameInput.trim().length < 2) return;
@@ -55,13 +63,47 @@ function ProfilePage() {
     toast.success("Name updated.");
   }
 
+  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !user) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Pick an image under 5MB.");
+      return;
+    }
+    setUploading(true);
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `${user.id}/avatar.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) {
+      setUploading(false);
+      toast.error("Couldn't upload your photo. Please try again.");
+      return;
+    }
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    const publicUrl = `${data.publicUrl}?v=${Date.now()}`; // bust cache
+    const { error: updErr } = await supabase
+      .from("profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", user.id);
+    setUploading(false);
+    if (updErr) {
+      toast.error("Couldn't save your photo.");
+      return;
+    }
+    await refreshProfile();
+    toast.success("Photo updated.");
+  }
+
   if (!isAuthenticated) {
     return (
-      <AppShell>
-        <main className="flex min-h-[75vh] flex-col items-center justify-center px-8 text-center">
+      <ResponsiveShell title="Profile">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
           <Logo size={36} />
           <h1 className="mt-5 font-display text-2xl">Your profile</h1>
-          <p className="mt-2 text-sm text-muted-foreground max-w-[240px]">
+          <p className="mt-2 max-w-[260px] text-sm text-muted-foreground">
             Sign in or create an account to see your tickets, saved spots and friends.
           </p>
           <div className="mt-7 flex w-full max-w-[260px] flex-col gap-3">
@@ -73,181 +115,155 @@ function ProfilePage() {
             </Link>
             <button
               onClick={openAuthModal}
-              className="inline-flex items-center justify-center rounded-full bg-surface ring-1 ring-border px-6 py-3 text-sm font-semibold"
+              className="inline-flex items-center justify-center rounded-full bg-surface px-6 py-3 text-sm font-semibold ring-1 ring-border"
             >
               Sign in
             </button>
           </div>
-        </main>
-      </AppShell>
+        </div>
+      </ResponsiveShell>
     );
   }
 
   return (
-    <AppShell>
-      <header className="px-5 pt-[max(env(safe-area-inset-top),1rem)] pb-2 flex items-center justify-between">
-        <Logo />
-        <button className="grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
+    <ResponsiveShell
+      title="Profile"
+      action={
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          className="grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border transition hover:ring-primary/40"
+        >
           <Settings className="h-4 w-4" />
-        </button>
-      </header>
-
-      <main className="px-5 pt-4 space-y-6">
+        </Link>
+      }
+    >
+      <div className="space-y-6">
         {/* Identity */}
-        <section className="rounded-2xl bg-gradient-soft p-5 ring-1 ring-primary/30">
+        <section className="rounded-3xl bg-gradient-soft p-5 ring-1 ring-primary/30">
           <div className="flex items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-gradient-brand text-2xl font-display shadow-glow">
-              {initial}
-            </div>
-            <div className="flex-1 min-w-0">
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="group relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-brand text-3xl font-display shadow-glow"
+              aria-label="Change photo"
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initial
+              )}
+              <span className="absolute inset-0 grid place-items-center bg-black/45 opacity-0 transition group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </span>
+              {uploading && (
+                <span className="absolute inset-0 grid place-items-center bg-black/60 text-[10px] font-semibold text-white">
+                  …
+                </span>
+              )}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={onPickAvatar}
+              className="hidden"
+            />
+
+            <div className="min-w-0 flex-1">
               {editing ? (
                 <div className="flex items-center gap-2">
                   <input
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
-                    className="w-full rounded-lg bg-background/60 px-2 py-1 text-lg font-display ring-1 ring-border focus:outline-none"
+                    className="w-full rounded-lg bg-background/60 px-2 py-1 font-display text-lg ring-1 ring-border focus:outline-none"
                     autoFocus
                   />
                   <button
                     onClick={saveName}
                     disabled={savingName}
-                    className="grid h-8 w-8 place-items-center rounded-full bg-gradient-brand text-primary-foreground"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-brand text-primary-foreground"
                   >
                     <Check className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <h1 className="font-display text-2xl truncate">{displayName}</h1>
-                  <button onClick={() => { setNameInput(displayName); setEditing(true); }} className="text-muted-foreground">
+                  <h1 className="truncate font-display text-2xl">{displayName}</h1>
+                  <button
+                    onClick={() => {
+                      setNameInput(displayName);
+                      setEditing(true);
+                    }}
+                    className="text-muted-foreground"
+                    aria-label="Edit name"
+                  >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground truncate">
-                {user?.email}{memberYear ? ` · Member since ${memberYear}` : ""}
+              <p className="truncate text-xs text-muted-foreground">
+                {user?.email}
+                {memberYear ? ` · Member since ${memberYear}` : ""}
               </p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+
+          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
             <Stat label="Tickets" value={bookings.length} />
             <Stat label="Saved" value={savedIds.length} />
             <Stat label="Friends" value={accepted.length} />
           </div>
         </section>
 
+        {/* Quick links */}
+        <section className="grid grid-cols-2 gap-3">
+          <QuickLink to="/tickets" icon={Ticket} label="My tickets" />
+          <QuickLink to="/saved" icon={Heart} label="Saved" />
+          <QuickLink to="/notifications" icon={Bell} label="Notifications" />
+          <QuickLink to="/support" icon={LifeBuoy} label="Support" />
+        </section>
+
         {/* Friends */}
-        <FriendsManager incoming={incoming} accepted={accepted} />
+        <section className="rounded-3xl bg-surface p-5 ring-1 ring-border">
+          <FriendsManager />
+        </section>
 
         <button
           onClick={() => signOut()}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-surface py-3 text-sm font-medium text-muted-foreground ring-1 ring-border"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3 text-sm font-medium text-muted-foreground ring-1 ring-border"
         >
           <LogOut className="h-4 w-4" /> Sign out
         </button>
 
-        <p className="text-center text-[11px] text-muted-foreground pt-2">TROVE v1.0 · Made in South Africa 🇿🇦</p>
-      </main>
-    </AppShell>
-  );
-}
-
-function FriendsManager({ incoming, accepted }: { incoming: FriendRow[]; accepted: FriendRow[] }) {
-  const addFriend = useAddFriend();
-  const respond = useRespondFriend();
-  const remove = useRemoveFriend();
-  const [email, setEmail] = useState("");
-
-  async function add() {
-    const value = email.trim();
-    if (!value) return;
-    try {
-      const { name } = await addFriend.mutateAsync(value);
-      toast.success(`Friend request sent to ${name}.`);
-      setEmail("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't send request.");
-    }
-  }
-
-  return (
-    <section className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-4">
-      <h2 className="font-display text-lg inline-flex items-center gap-2">
-        <UserPlus className="h-4 w-4 text-primary" /> Friends
-      </h2>
-
-      {/* Add by email */}
-      <div className="flex items-stretch gap-2">
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          type="email"
-          placeholder="Add a friend by email"
-          className="flex-1 rounded-full bg-surface-elevated px-4 py-2.5 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
-        />
-        <button
-          onClick={add}
-          disabled={addFriend.isPending}
-          className="rounded-full bg-gradient-brand px-4 text-sm font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-50"
-        >
-          Add
-        </button>
+        <p className="pt-2 text-center text-[11px] text-muted-foreground">
+          TROVE v1.0 · Made in South Africa 🇿🇦
+        </p>
       </div>
-
-      {/* Incoming requests */}
-      {incoming.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
-          {incoming.map((f) => (
-            <div key={f.friendId} className="flex items-center gap-3 rounded-2xl bg-surface-elevated p-2.5">
-              <Avatar name={f.name} />
-              <p className="flex-1 text-sm font-medium truncate">{f.name}</p>
-              <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: true })}
-                className="grid h-8 w-8 place-items-center rounded-full bg-success/20 text-success"
-              >
-                <Check className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: false })}
-                className="grid h-8 w-8 place-items-center rounded-full bg-surface text-muted-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Accepted friends */}
-      {accepted.length > 0 ? (
-        <div className="space-y-2">
-          {accepted.map((f) => (
-            <div key={f.friendId} className="flex items-center gap-3 rounded-2xl bg-surface-elevated p-2.5">
-              <Avatar name={f.name} />
-              <p className="flex-1 text-sm font-medium truncate">{f.name}</p>
-              <button
-                onClick={() => remove.mutate(f.friendId)}
-                className="text-[11px] text-muted-foreground hover:text-destructive"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">No friends yet — add a few to see who's going out.</p>
-      )}
-    </section>
+    </ResponsiveShell>
   );
 }
 
-function Avatar({ name }: { name: string }) {
+function QuickLink({
+  to,
+  icon: Icon,
+  label,
+}: {
+  to: "/tickets" | "/saved" | "/notifications" | "/support";
+  icon: typeof Ticket;
+  label: string;
+}) {
   return (
-    <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-brand text-sm font-display text-primary-foreground">
-      {name.charAt(0).toUpperCase()}
-    </div>
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded-2xl bg-surface p-4 ring-1 ring-border transition hover:ring-primary/40"
+    >
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-soft ring-1 ring-primary/30">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <span className="flex-1 text-sm font-semibold">{label}</span>
+      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+    </Link>
   );
 }
 

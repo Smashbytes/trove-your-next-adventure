@@ -71,6 +71,14 @@ export function SplashScreen() {
                 src={logo}
                 alt="TROVE"
                 className="h-full w-full object-contain drop-shadow-[0_0_30px_rgba(232,30,140,0.6)]"
+                style={{
+                  // Feather the outer edge so the logo melts into the dark stage
+                  // instead of showing a hard rectangular/PNG boundary.
+                  maskImage:
+                    "radial-gradient(circle at 50% 50%, #000 58%, rgba(0,0,0,0.55) 78%, transparent 100%)",
+                  WebkitMaskImage:
+                    "radial-gradient(circle at 50% 50%, #000 58%, rgba(0,0,0,0.55) 78%, transparent 100%)",
+                }}
               />
               {/* Diagonal shine sweep */}
               <motion.div
