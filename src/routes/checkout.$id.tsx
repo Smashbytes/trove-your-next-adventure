@@ -64,12 +64,20 @@ function CheckoutPage() {
   if (!isAuthenticated) return <AuthRequired onSignIn={openAuthModal} spotId={id} />;
   if (!intent) return <div className="p-10 text-center text-muted-foreground">Loading checkout…</div>;
 
+  // Paid + live (non-demo) listings settle through Paystack's hosted checkout;
+  // demo/free bookings use the in-app mock flow.
+  const isPaystack = !demo && intent.total > 0;
+
   const detailsValid =
     name.trim().length >= 2 &&
     /^\S+@\S+\.\S+$/.test(email) &&
     phone.trim().replace(/\D/g, "").length >= 7;
 
+  // Real Paystack checkout collects card details on Paystack's PCI-compliant
+  // page, so there's nothing to validate here. The mock card form only gates
+  // the demo/free flow.
   const paymentValid =
+    isPaystack ||
     method !== "card" ||
     (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3);
 
@@ -221,15 +229,47 @@ function CheckoutPage() {
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="space-y-3"
             >
-              <h2 className="font-display text-lg">Payment method</h2>
+              <h2 className="font-display text-lg">Payment</h2>
 
+              {/* Real Paystack checkout — card details are entered on Paystack's
+                  secure, PCI-compliant page after redirect. */}
+              {isPaystack && (
+                <div className="space-y-3">
+                  <div className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-brand shadow-glow-soft">
+                        <ShieldCheck className="h-5 w-5 text-primary-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Secure checkout by Paystack</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          You'll be redirected to Paystack to pay {formatPrice(intent.total)}.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {["Card", "Instant EFT", "Apple / Google Pay"].map((m) => (
+                        <span key={m} className="rounded-full bg-surface-elevated px-2.5 py-1 text-[10px] text-muted-foreground ring-1 ring-border">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                    <Lock className="h-3 w-3 text-success" /> 3-D Secure protected · your card details never touch TROVE.
+                  </p>
+                </div>
+              )}
+
+              {!isPaystack && (
               <div className="grid grid-cols-3 gap-2">
                 <PayTab icon={<CreditCard className="h-4 w-4" />} label="Card" active={method === "card"} onClick={() => setMethod("card")} />
                 <PayTab icon={<Building2 className="h-4 w-4" />} label="EFT" active={method === "eft"} onClick={() => setMethod("eft")} />
                 <PayTab icon={<Wallet className="h-4 w-4" />} label="Wallet" active={method === "wallet"} onClick={() => setMethod("wallet")} />
               </div>
+              )}
 
-              {method === "card" && (
+              {!isPaystack && method === "card" && (
                 <div className="space-y-3">
                   <Field label="Card number">
                     <input
@@ -262,7 +302,7 @@ function CheckoutPage() {
                 </div>
               )}
 
-              {method === "eft" && (
+              {!isPaystack && method === "eft" && (
                 <div className="rounded-2xl bg-surface ring-1 ring-border p-4 text-sm space-y-1">
                   <p className="font-semibold">Instant EFT</p>
                   <p className="text-xs text-muted-foreground">
@@ -270,16 +310,18 @@ function CheckoutPage() {
                   </p>
                 </div>
               )}
-              {method === "wallet" && (
+              {!isPaystack && method === "wallet" && (
                 <div className="rounded-2xl bg-gradient-soft ring-1 ring-primary/30 p-4 text-sm space-y-1">
                   <p className="font-semibold">TROVE Wallet</p>
                   <p className="text-xs text-muted-foreground">Balance: {formatPrice(2400)} · Sufficient ✓</p>
                 </div>
               )}
 
-              <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Mock gateway — no real charge will be made.
-              </p>
+              {!isPaystack && (
+                <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                  <Lock className="h-3 w-3" /> Demo checkout — no real charge will be made.
+                </p>
+              )}
             </motion.section>
           )}
 
