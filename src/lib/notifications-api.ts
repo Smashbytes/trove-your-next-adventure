@@ -81,6 +81,14 @@ export function describeNotification(n: AppNotification): { title: string; body:
       payment_failed: "Payment failed",
       refund_processed: "Refund processed",
       friend_request: "New friend request",
+      group_invite: "Group invite",
+      split_request: "Split payment request",
+      split_reoffer: "Split updated",
+      split_ready: "Split ready — pay your share",
+      split_completed: "Split complete",
+      split_declined: "Split declined",
+      split_cancelled: "Split cancelled",
+      split_expired: "Split expired",
     }[n.type] ??
     n.type.replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 

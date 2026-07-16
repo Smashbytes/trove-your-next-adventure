@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as SparkRouteImport } from './routes/spark'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SavedRouteImport } from './routes/saved'
@@ -19,6 +20,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpotIdRouteImport } from './routes/spot.$id'
+import { Route as SplitIdRouteImport } from './routes/split.$id'
 import { Route as HostSlugRouteImport } from './routes/host.$slug'
 import { Route as CheckoutIdRouteImport } from './routes/checkout.$id'
 import { Route as BookingIdRouteImport } from './routes/booking.$id'
@@ -31,6 +33,11 @@ const TicketsRoute = TicketsRouteImport.update({
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SparkRoute = SparkRouteImport.update({
+  id: '/spark',
+  path: '/spark',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -73,6 +80,11 @@ const SpotIdRoute = SpotIdRouteImport.update({
   path: '/spot/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SplitIdRoute = SplitIdRouteImport.update({
+  id: '/split/$id',
+  path: '/split/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HostSlugRoute = HostSlugRouteImport.update({
   id: '/host/$slug',
   path: '/host/$slug',
@@ -97,11 +109,13 @@ export interface FileRoutesByFullPath {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/spark': typeof SparkRoute
   '/support': typeof SupportRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesByTo {
@@ -112,11 +126,13 @@ export interface FileRoutesByTo {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/spark': typeof SparkRoute
   '/support': typeof SupportRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRoutesById {
@@ -128,11 +144,13 @@ export interface FileRoutesById {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/spark': typeof SparkRoute
   '/support': typeof SupportRoute
   '/tickets': typeof TicketsRoute
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
 export interface FileRouteTypes {
@@ -145,11 +163,13 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/settings'
+    | '/spark'
     | '/support'
     | '/tickets'
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/split/$id'
     | '/spot/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -160,11 +180,13 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/settings'
+    | '/spark'
     | '/support'
     | '/tickets'
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/split/$id'
     | '/spot/$id'
   id:
     | '__root__'
@@ -175,11 +197,13 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/settings'
+    | '/spark'
     | '/support'
     | '/tickets'
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/split/$id'
     | '/spot/$id'
   fileRoutesById: FileRoutesById
 }
@@ -191,11 +215,13 @@ export interface RootRouteChildren {
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
+  SparkRoute: typeof SparkRoute
   SupportRoute: typeof SupportRoute
   TicketsRoute: typeof TicketsRoute
   BookingIdRoute: typeof BookingIdRoute
   CheckoutIdRoute: typeof CheckoutIdRoute
   HostSlugRoute: typeof HostSlugRoute
+  SplitIdRoute: typeof SplitIdRoute
   SpotIdRoute: typeof SpotIdRoute
 }
 
@@ -213,6 +239,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/spark': {
+      id: '/spark'
+      path: '/spark'
+      fullPath: '/spark'
+      preLoaderRoute: typeof SparkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -271,6 +304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpotIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/split/$id': {
+      id: '/split/$id'
+      path: '/split/$id'
+      fullPath: '/split/$id'
+      preLoaderRoute: typeof SplitIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/host/$slug': {
       id: '/host/$slug'
       path: '/host/$slug'
@@ -303,11 +343,13 @@ const rootRouteChildren: RootRouteChildren = {
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
+  SparkRoute: SparkRoute,
   SupportRoute: SupportRoute,
   TicketsRoute: TicketsRoute,
   BookingIdRoute: BookingIdRoute,
   CheckoutIdRoute: CheckoutIdRoute,
   HostSlugRoute: HostSlugRoute,
+  SplitIdRoute: SplitIdRoute,
   SpotIdRoute: SpotIdRoute,
 }
 export const routeTree = rootRouteImport

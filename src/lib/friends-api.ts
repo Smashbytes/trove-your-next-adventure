@@ -46,6 +46,7 @@ export function useFriendsGoing(listingId: string | undefined) {
 export interface FriendRow {
   friendId: string;
   name: string;
+  username: string | null;
   avatarUrl: string | null;
   status: "pending" | "accepted" | "declined";
   requestedByMe: boolean;
@@ -63,7 +64,8 @@ export function useFriends() {
       if (error) throw error;
       return (data ?? []).map((r) => ({
         friendId: r.friend_id,
-        name: r.full_name?.trim() || "Friend",
+        name: r.full_name?.trim() || (r.username ? `@${r.username}` : "Friend"),
+        username: r.username,
         avatarUrl: r.avatar_url,
         status: r.status as FriendRow["status"],
         requestedByMe: r.requested_by === user.id,

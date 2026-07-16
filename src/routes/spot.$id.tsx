@@ -7,9 +7,10 @@ import { FriendStack } from "@/components/FriendStack";
 import { SpotDetailDesktop } from "@/components/desktop/SpotDetailDesktop";
 import { openDirections } from "@/lib/maps";
 import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
-import { useListing } from "@/lib/listings-api";
+import { useIsDemo, useListing } from "@/lib/listings-api";
 import { useAuth } from "@/lib/auth";
-import { useFriendsGoing } from "@/lib/friends-api";
+import { useFriends, useFriendsGoing } from "@/lib/friends-api";
+import { useCreateSplit, useGroupMembers, useMyGroups } from "@/lib/spark-api";
 import { useSavedIds, useToggleSave } from "@/lib/social";
 import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
 import { useState, useMemo } from "react";
@@ -31,14 +32,60 @@ function SpotPage() {
   const [qty, setQty] = useState(1);
   const [splitOpen, setSplitOpen] = useState(false);
   const [pickedFriends, setPickedFriends] = useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const { data: savedIds = [] } = useSavedIds();
   const toggleSave = useToggleSave();
   const saved = savedIds.includes(id);
   const { isAuthenticated, openAuthModal } = useAuth();
+  const demo = useIsDemo();
+
+  // Live split flow — real linked friends, filterable by friend group.
+  const { data: friendRows = [] } = useFriends();
+  const linkedFriends = useMemo(
+    () => friendRows.filter((f) => f.status === "accepted"),
+    [friendRows],
+  );
+  const { data: myGroups = [] } = useMyGroups();
+  const memberGroups = myGroups.filter((g) => g.myStatus === "member");
+  const { data: groupMembers = [] } = useGroupMembers(groupFilter ?? undefined);
+  const groupMemberIds = useMemo(
+    () => new Set(groupMembers.map((m) => m.userId)),
+    [groupMembers],
+  );
+  const pickableFriends = groupFilter
+    ? linkedFriends.filter((f) => groupMemberIds.has(f.friendId))
+    : linkedFriends;
+  const createSplit = useCreateSplit();
+  const [sendingSplit, setSendingSplit] = useState(false);
 
   const total = spot ? spot.price * qty : 0;
   const splitCount = pickedFriends.length + 1; // include me
   const perPerson = useMemo(() => Math.ceil(total / splitCount), [total, splitCount]);
+
+  // Demo keeps the mock split-at-checkout; live users send a real split request.
+  const canSplit = demo
+    ? friendsGoing.length > 0
+    : isAuthenticated && (spot?.price ?? 0) > 0 && linkedFriends.length > 0;
+
+  async function sendSplitRequest() {
+    if (!spot || pickedFriends.length === 0) return;
+    setSendingSplit(true);
+    try {
+      const { split_id } = await createSplit.mutateAsync({
+        listingId: spot.id,
+        qty,
+        friendIds: pickedFriends,
+      });
+      setSplitOpen(false);
+      setPickedFriends([]);
+      toast.success("Split request sent — we'll ping you when everyone responds.");
+      navigate({ to: "/split/$id", params: { id: split_id } });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send the split request.");
+    } finally {
+      setSendingSplit(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -66,7 +113,7 @@ function SpotPage() {
   function book() {
     if (!spot) return;
     let split: { participants: SplitParticipant[]; perPerson: number } | undefined;
-    if (pickedFriends.length > 0) {
+    if (demo && pickedFriends.length > 0) {
       const participants: SplitParticipant[] = [
         { friendId: "me", name: "You", initial: "Y", hue: 320, paid: true },
         ...friendsGoing
@@ -265,7 +312,7 @@ function SpotPage() {
         </section>
 
         {/* Split bill toggle */}
-        {friendsGoing.length > 0 && (
+        {canSplit && (
           <section className="rounded-2xl bg-surface ring-1 ring-border p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -277,7 +324,9 @@ function SpotPage() {
                   <p className="text-[11px] text-muted-foreground truncate">
                     {pickedFriends.length > 0
                       ? `Splitting with ${pickedFriends.length} · ${formatPrice(perPerson)} each`
-                      : "Share the cost with your crew"}
+                      : demo
+                        ? "Share the cost with your crew"
+                        : "Send your TROVE friends a split payment request"}
                   </p>
                 </div>
               </div>
@@ -325,46 +374,129 @@ function SpotPage() {
                 </p>
               </div>
 
-              {/* Friend picker */}
-              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                {friendsGoing.map((f) => {
-                  const picked = pickedFriends.includes(f.id);
-                  return (
+              {/* Group filter (live only) */}
+              {!demo && memberGroups.length > 0 && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button
+                    onClick={() => setGroupFilter(null)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                      groupFilter === null
+                        ? "bg-gradient-brand text-primary-foreground"
+                        : "bg-surface-elevated text-muted-foreground ring-1 ring-border"
+                    }`}
+                  >
+                    All friends
+                  </button>
+                  {memberGroups.map((g) => (
                     <button
-                      key={f.id}
-                      onClick={() => toggleFriend(f.id)}
-                      className={`w-full flex items-center gap-3 rounded-2xl p-3 ring-1 transition ${
-                        picked ? "bg-primary/10 ring-primary/40" : "bg-surface-elevated ring-border"
+                      key={g.id}
+                      onClick={() => setGroupFilter(groupFilter === g.id ? null : g.id)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                        groupFilter === g.id
+                          ? "bg-gradient-brand text-primary-foreground"
+                          : "bg-surface-elevated text-muted-foreground ring-1 ring-border"
                       }`}
                     >
-                      <div
-                        className="grid h-10 w-10 place-items-center rounded-full font-display text-sm text-white"
-                        style={{ background: `oklch(0.65 0.22 ${f.hue})` }}
-                      >
-                        {f.initial}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <p className="text-sm font-semibold">{f.name}</p>
-                        <p className="text-[11px] text-muted-foreground">Friend</p>
-                      </div>
-                      <div
-                        className={`grid h-6 w-6 place-items-center rounded-full transition ${
-                          picked ? "bg-gradient-brand" : "bg-background ring-1 ring-border"
-                        }`}
-                      >
-                        {picked && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
-                      </div>
+                      {g.name}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+              )}
+
+              {/* Friend picker */}
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                {demo
+                  ? friendsGoing.map((f) => {
+                      const picked = pickedFriends.includes(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => toggleFriend(f.id)}
+                          className={`w-full flex items-center gap-3 rounded-2xl p-3 ring-1 transition ${
+                            picked ? "bg-primary/10 ring-primary/40" : "bg-surface-elevated ring-border"
+                          }`}
+                        >
+                          <div
+                            className="grid h-10 w-10 place-items-center rounded-full font-display text-sm text-white"
+                            style={{ background: `oklch(0.65 0.22 ${f.hue})` }}
+                          >
+                            {f.initial}
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-semibold">{f.name}</p>
+                            <p className="text-[11px] text-muted-foreground">Friend</p>
+                          </div>
+                          <div
+                            className={`grid h-6 w-6 place-items-center rounded-full transition ${
+                              picked ? "bg-gradient-brand" : "bg-background ring-1 ring-border"
+                            }`}
+                          >
+                            {picked && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
+                          </div>
+                        </button>
+                      );
+                    })
+                  : pickableFriends.map((f) => {
+                      const picked = pickedFriends.includes(f.friendId);
+                      return (
+                        <button
+                          key={f.friendId}
+                          onClick={() => toggleFriend(f.friendId)}
+                          className={`w-full flex items-center gap-3 rounded-2xl p-3 ring-1 transition ${
+                            picked ? "bg-primary/10 ring-primary/40" : "bg-surface-elevated ring-border"
+                          }`}
+                        >
+                          <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-gradient-brand font-display text-sm text-primary-foreground">
+                            {f.avatarUrl
+                              ? <img src={f.avatarUrl} alt="" className="h-full w-full object-cover" />
+                              : f.name.replace(/^@/, "").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-semibold">{f.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {f.username ? `@${f.username}` : "Linked friend"}
+                            </p>
+                          </div>
+                          <div
+                            className={`grid h-6 w-6 place-items-center rounded-full transition ${
+                              picked ? "bg-gradient-brand" : "bg-background ring-1 ring-border"
+                            }`}
+                          >
+                            {picked && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                {!demo && pickableFriends.length === 0 && (
+                  <p className="py-4 text-center text-xs text-muted-foreground">
+                    {groupFilter
+                      ? "None of this group's members are your linked friends yet."
+                      : "Link up with friends on the Spark page to split payments."}
+                  </p>
+                )}
               </div>
 
-              <button
-                onClick={() => setSplitOpen(false)}
-                className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
-              >
-                Confirm split
-              </button>
+              {demo ? (
+                <button
+                  onClick={() => setSplitOpen(false)}
+                  className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+                >
+                  Confirm split
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={sendSplitRequest}
+                    disabled={pickedFriends.length === 0 || sendingSplit}
+                    className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40"
+                  >
+                    {sendingSplit ? "Sending…" : `Send split request${pickedFriends.length > 0 ? ` · ${formatPrice(perPerson)} each` : ""}`}
+                  </button>
+                  <p className="text-center text-[10px] text-muted-foreground">
+                    Friends accept in-app, then everyone pays their share (+R5 split fee). Tickets are issued once all shares are paid.
+                  </p>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -384,10 +516,10 @@ function SpotPage() {
             </div>
             <div className="flex-1">
               <div className="text-[10px] text-muted-foreground">
-                {pickedFriends.length > 0 ? `Your share` : "Total"}
+                {demo && pickedFriends.length > 0 ? `Your share` : "Total"}
               </div>
               <div className="font-display text-lg text-gradient">
-                {formatPrice(pickedFriends.length > 0 ? perPerson : total)}
+                {formatPrice(demo && pickedFriends.length > 0 ? perPerson : total)}
               </div>
             </div>
             <button

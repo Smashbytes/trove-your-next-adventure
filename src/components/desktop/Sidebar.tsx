@@ -14,7 +14,7 @@ import { CITIES } from "@/lib/spots";
 import { getGuestPrefs } from "@/lib/guest-prefs";
 
 type NavItem = {
-  to: "/" | "/search" | "/saved" | "/tickets" | "/settings";
+  to: "/" | "/search" | "/saved" | "/tickets" | "/settings" | "/spark";
   label: string;
   icon: typeof Compass;
   exact?: boolean;
@@ -26,7 +26,7 @@ const primary: NavItem[] = [
   { to: "/", label: "Discover", icon: Compass, exact: true },
   { to: "/search", label: "Events", icon: CalendarDays },
   { to: "/settings", label: "My Spots", icon: Building2 },
-  { to: "/search", label: "Groups", icon: Users, soon: true },
+  { to: "/spark", label: "Spark", icon: Users },
   { to: "/saved", label: "Saved", icon: Heart },
   { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/tickets", label: "History", icon: Clock },
