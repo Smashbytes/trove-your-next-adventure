@@ -35,6 +35,8 @@ function CheckoutPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [idType, setIdType] = useState<"ID" | "PASSPORT">("ID");
+  const [idNumber, setIdNumber] = useState("");
 
   // Payment fields (mock)
   const [method, setMethod] = useState<PayMethod>("card");
@@ -64,20 +66,21 @@ function CheckoutPage() {
   if (!isAuthenticated) return <AuthRequired onSignIn={openAuthModal} spotId={id} />;
   if (!intent) return <div className="p-10 text-center text-muted-foreground">Loading checkout…</div>;
 
-  // Paid + live (non-demo) listings settle through Paystack's hosted checkout;
+  // Paid + live (non-demo) listings settle through TradeSafe's hosted checkout;
   // demo/free bookings use the in-app mock flow.
-  const isPaystack = !demo && intent.total > 0;
+  const isTradeSafe = !demo && intent.total > 0;
 
   const detailsValid =
     name.trim().length >= 2 &&
     /^\S+@\S+\.\S+$/.test(email) &&
-    phone.trim().replace(/\D/g, "").length >= 7;
+    phone.trim().replace(/\D/g, "").length >= 7 &&
+    idNumber.trim().length >= 4;
 
-  // Real Paystack checkout collects card details on Paystack's PCI-compliant
+  // TradeSafe checkout collects payment details on its hosted secure page.
   // page, so there's nothing to validate here. The mock card form only gates
   // the demo/free flow.
   const paymentValid =
-    isPaystack ||
+    isTradeSafe ||
     method !== "card" ||
     (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3);
 
@@ -86,13 +89,14 @@ function CheckoutPage() {
     setErrorMsg(null);
     setStep("processing");
     try {
-      // Paid live listings go through Paystack (test mode); demo + free use the
+      // Paid live listings go through TradeSafe; demo + free use the
       // direct booking path.
-      if (!demo && intent.total > 0) {
+      if (isTradeSafe) {
         const { authorizationUrl } = await initPayment.mutateAsync({
           listingId: spot.id,
           qty: intent.qty,
           attestedAge: true,
+          buyer: { name, phone, idNumber, idType },
         });
         clearCheckoutIntent();
         window.location.href = authorizationUrl;
@@ -215,6 +219,26 @@ function CheckoutPage() {
                   className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
                 />
               </Field>
+              <div className="grid grid-cols-[0.8fr_1.2fr] gap-3">
+                <Field label="ID type">
+                  <select
+                    value={idType}
+                    onChange={(e) => setIdType(e.target.value as "ID" | "PASSPORT")}
+                    className="w-full bg-transparent text-sm outline-none"
+                  >
+                    <option value="ID">ID number</option>
+                    <option value="PASSPORT">Passport</option>
+                  </select>
+                </Field>
+                <Field label={idType === "ID" ? "ID number" : "Passport number"}>
+                  <input
+                    value={idNumber}
+                    onChange={(e) => setIdNumber(e.target.value)}
+                    autoComplete="off"
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  />
+                </Field>
+              </div>
               <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-success" />
                 We'll send your QR ticket to email and WhatsApp.
@@ -231,9 +255,9 @@ function CheckoutPage() {
             >
               <h2 className="font-display text-lg">Payment</h2>
 
-              {/* Real Paystack checkout — card details are entered on Paystack's
+              {/* TradeSafe checkout — payment details are entered on TradeSafe's
                   secure, PCI-compliant page after redirect. */}
-              {isPaystack && (
+              {isTradeSafe && (
                 <div className="space-y-3">
                   <div className="rounded-2xl bg-surface ring-1 ring-border p-4 space-y-3">
                     <div className="flex items-center gap-3">
@@ -241,9 +265,9 @@ function CheckoutPage() {
                         <ShieldCheck className="h-5 w-5 text-primary-foreground" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold">Secure checkout by Paystack</p>
+                        <p className="text-sm font-semibold">Secure checkout by TradeSafe</p>
                         <p className="text-[11px] text-muted-foreground">
-                          You'll be redirected to Paystack to pay {formatPrice(intent.total)}.
+                          You'll be redirected to TradeSafe to pay {formatPrice(intent.total)} into escrow.
                         </p>
                       </div>
                     </div>
@@ -261,7 +285,7 @@ function CheckoutPage() {
                 </div>
               )}
 
-              {!isPaystack && (
+              {!isTradeSafe && (
               <div className="grid grid-cols-3 gap-2">
                 <PayTab icon={<CreditCard className="h-4 w-4" />} label="Card" active={method === "card"} onClick={() => setMethod("card")} />
                 <PayTab icon={<Building2 className="h-4 w-4" />} label="EFT" active={method === "eft"} onClick={() => setMethod("eft")} />
@@ -269,7 +293,7 @@ function CheckoutPage() {
               </div>
               )}
 
-              {!isPaystack && method === "card" && (
+              {!isTradeSafe && method === "card" && (
                 <div className="space-y-3">
                   <Field label="Card number">
                     <input
@@ -302,7 +326,7 @@ function CheckoutPage() {
                 </div>
               )}
 
-              {!isPaystack && method === "eft" && (
+              {!isTradeSafe && method === "eft" && (
                 <div className="rounded-2xl bg-surface ring-1 ring-border p-4 text-sm space-y-1">
                   <p className="font-semibold">Instant EFT</p>
                   <p className="text-xs text-muted-foreground">
@@ -310,14 +334,14 @@ function CheckoutPage() {
                   </p>
                 </div>
               )}
-              {!isPaystack && method === "wallet" && (
+              {!isTradeSafe && method === "wallet" && (
                 <div className="rounded-2xl bg-gradient-soft ring-1 ring-primary/30 p-4 text-sm space-y-1">
                   <p className="font-semibold">TROVE Wallet</p>
                   <p className="text-xs text-muted-foreground">Balance: {formatPrice(2400)} · Sufficient ✓</p>
                 </div>
               )}
 
-              {!isPaystack && (
+              {!isTradeSafe && (
                 <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
                   <Lock className="h-3 w-3" /> Demo checkout — no real charge will be made.
                 </p>

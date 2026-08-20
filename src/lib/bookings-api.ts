@@ -4,8 +4,7 @@
 //   - demo account: existing mock store (localStorage), full split-bill flow
 //   - live users:   create-booking / cancel-booking edge functions + DB reads
 //
-// Free/RSVP only for now; paid bookings surface a "payment coming soon" error
-// from the edge function until Paystack lands (Phase 4).
+// Paid bookings use TradeSafe hosted checkout; free/RSVP bookings stay in-app.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
@@ -27,6 +26,7 @@ export type BookingStatusView =
   | "cancelled"
   | "refunded"
   | "refund_pending"
+  | "payment_failed"
   | "pending";
 
 export interface BookingView {
@@ -62,7 +62,8 @@ function mockToView(b: MockBooking, spot: Spot | null): BookingView {
 function dbStatusToView(s: string): BookingStatusView {
   if (s === "cancelled") return "cancelled";
   if (s === "refunded") return "refunded";
-  if (s === "pending") return "pending";
+  if (["pending", "pending_payment"].includes(s)) return "pending";
+  if (s === "payment_failed") return "payment_failed";
   return "confirmed";
 }
 
@@ -121,8 +122,8 @@ export function useBooking(id: string | undefined) {
   return useQuery<BookingView | null>({
     queryKey: ["booking", local, user?.id, id],
     enabled: !!id,
-    // While a Paystack payment settles the booking sits in `pending`; poll until
-    // the webhook flips it to confirmed.
+    // While a TradeSafe payment settles the booking sits in `pending`; poll until
+    // the verified callback flips it to confirmed.
     refetchInterval: (query) => (query.state.data?.status === "pending" ? 4000 : false),
     queryFn: async () => {
       if (local) {
@@ -206,21 +207,26 @@ export interface InitPaymentArgs {
   listingId: string;
   qty: number;
   attestedAge?: boolean;
+  buyer: { name: string; phone: string; idNumber: string; idType: "ID" | "PASSPORT" };
 }
 
 /**
- * Start a Paystack (TEST-MODE) transaction for a paid listing. Returns the
+ * Start a TradeSafe transaction for a paid listing. Returns the
  * hosted-checkout URL; the caller redirects the browser there. Confirmation
  * happens server-side via the paystack-webhook.
  */
 export function useInitializePayment() {
   return useMutation<{ authorizationUrl: string; bookingId: string }, Error, InitPaymentArgs>({
     mutationFn: async (args) => {
-      const { data, error } = await supabase.functions.invoke("paystack-initialize", {
+      const { data, error } = await supabase.functions.invoke("tradesafe-initialize", {
         body: {
           listing_id: args.listingId,
           party_size: args.qty,
           attested_age: args.attestedAge ?? false,
+          buyer_name: args.buyer.name,
+          buyer_phone: args.buyer.phone,
+          buyer_id_number: args.buyer.idNumber,
+          buyer_id_type: args.buyer.idType,
         },
       });
       if (error) {
@@ -234,8 +240,8 @@ export function useInitializePayment() {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      const d = data as { authorization_url: string; booking_id: string };
-      return { authorizationUrl: d.authorization_url, bookingId: d.booking_id };
+      const d = data as { checkout_url: string; booking_id: string };
+      return { authorizationUrl: d.checkout_url, bookingId: d.booking_id };
     },
   });
 }
