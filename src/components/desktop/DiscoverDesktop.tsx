@@ -46,11 +46,13 @@ function trendingScore(s: Spot) {
 export function DiscoverDesktop() {
   const { isAuthenticated } = useAuth();
 
-  const [activeCity, setActiveCity] = useState<string>(() => {
-    const c = getGuestPrefs().city;
-    return c && CITY_TABS.includes(c) ? c : CITY_TABS[0];
-  });
+  const [activeCity, setActiveCity] = useState<string>(CITY_TABS[0]);
   const [activeCat, setActiveCat] = useState<string | null>(null);
+
+  useEffect(() => {
+    const c = getGuestPrefs().city;
+    if (c && CITY_TABS.includes(c)) setActiveCity(c);
+  }, []);
 
   const { data: allListings = [] } = useListings({});
   const { data: picks = [] } = useEditorsPicks();

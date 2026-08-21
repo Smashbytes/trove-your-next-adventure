@@ -1,4 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Compass,
   CalendarDays,
@@ -40,8 +41,12 @@ interface SidebarProps {
 
 export function Sidebar({ activeCity, onSelectCity }: SidebarProps) {
   const { pathname } = useLocation();
-  const prefCity = getGuestPrefs().city;
+  const [prefCity, setPrefCity] = useState<string | null>(null);
   const cities = CITIES.slice(0, 4); // Joburg, Pretoria, Cape Town, Durban
+
+  useEffect(() => {
+    setPrefCity(getGuestPrefs().city);
+  }, []);
 
   return (
     <aside className="sticky top-0 hidden h-dvh w-[244px] shrink-0 flex-col border-r border-border/50 bg-sidebar px-4 py-5 lg:flex">

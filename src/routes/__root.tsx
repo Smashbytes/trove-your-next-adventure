@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { AuthModal } from "@/components/AuthModal";
@@ -81,11 +82,21 @@ function AppWithAuth() {
 }
 
 function RootComponent() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppWithAuth />
-      </AuthProvider>
+      {mounted ? (
+        <AuthProvider>
+          <AppWithAuth />
+        </AuthProvider>
+      ) : (
+        <div className="min-h-screen bg-background" aria-busy="true" />
+      )}
     </QueryClientProvider>
   );
 }

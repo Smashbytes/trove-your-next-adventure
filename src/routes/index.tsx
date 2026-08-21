@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell, UserPlus, Search, ChevronRight, Users2, MapPin, Navigation } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { DiscoverDesktop } from "@/components/desktop/DiscoverDesktop";
@@ -49,10 +49,14 @@ function MobileDiscover() {
   const [tab, setTab] = useState<(typeof tabs)[number]>("For You");
   const [activeCat, setActiveCat] = useState<string>("All");
   // Default to the city chosen during onboarding, when it's one we filter on.
-  const [activeCity, setActiveCity] = useState<string>(() => {
+  const [activeCity, setActiveCity] = useState<string>("All");
+  const [preferredCity, setPreferredCity] = useState<string | null>(null);
+
+  useEffect(() => {
     const c = getGuestPrefs().city;
-    return c && (CITIES as string[]).includes(c) ? c : "All";
-  });
+    setPreferredCity(c);
+    if (c && (CITIES as string[]).includes(c)) setActiveCity(c);
+  }, []);
 
   const { names: catNames } = useTopLevelCategories();
   const categories = useMemo<string[]>(() => ["All", ...catNames], [catNames]);
@@ -89,19 +93,19 @@ function MobileDiscover() {
 
   const { isAuthenticated, profile } = useAuth();
 
-  const timeGreeting = useMemo(() => {
+  const [timeGreeting, setTimeGreeting] = useState("Good evening");
+
+  useEffect(() => {
     const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
+    setTimeGreeting(h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
   }, []);
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "you";
 
   const displayCity = useMemo(() => {
     if (activeCity !== "All") return activeCity;
-    return getGuestPrefs().city ?? "South Africa";
-  }, [activeCity]);
+    return preferredCity ?? "South Africa";
+  }, [activeCity, preferredCity]);
 
   return (
     <AppShell>

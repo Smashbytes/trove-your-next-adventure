@@ -5,19 +5,19 @@ import logo from "@/assets/trove-logo.png";
 const SPLASH_KEY = "trove_splash_seen";
 
 export function SplashScreen() {
-  const [show, setShow] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return !sessionStorage.getItem(SPLASH_KEY);
-  });
+  // Keep the server and first client render identical. Browser-only session
+  // state is read after hydration so a fresh tab cannot trigger a mismatch.
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!show) return;
+    if (sessionStorage.getItem(SPLASH_KEY)) return;
+    setShow(true);
     const t = setTimeout(() => {
       sessionStorage.setItem(SPLASH_KEY, "1");
       setShow(false);
     }, 1700);
     return () => clearTimeout(t);
-  }, [show]);
+  }, []);
 
   return (
     <AnimatePresence>
