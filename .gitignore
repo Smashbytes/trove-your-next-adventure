@@ -45,3 +45,6 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Universal-analyzer scan artifacts (local tooling only)
+.ua/
