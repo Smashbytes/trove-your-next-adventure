@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AtSign, BadgeCheck, Check, Heart, LifeBuoy, Bell, Sparkles, ChevronRight, Zap, X } from "lucide-react";
+import { AtSign, BadgeCheck, Check, Heart, LifeBuoy, Bell, ShieldCheck, Sparkles, ChevronRight, Zap, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
 import { useFollowedHosts, useToggleFollow } from "@/lib/social";
 import { CATEGORIES, CITIES } from "@/lib/spots";
 import { getGuestPrefs, patchGuestPrefs, type GuestPrefs } from "@/lib/guest-prefs";
+import { isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
 import {
   normalizeUsername,
   USERNAME_RE,
@@ -51,6 +52,7 @@ function SettingsPage() {
         </Card>
         <MySpots />
         <NotificationPrefs />
+        <PrivacyData />
 
         <Link
           to="/support"
@@ -344,6 +346,54 @@ function MySpots() {
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function PrivacyData() {
+  const [analytics, setAnalytics] = useState(() => isAnalyticsEnabled());
+
+  function toggle() {
+    const next = !analytics;
+    setAnalytics(next);
+    setAnalyticsEnabled(next);
+  }
+
+  return (
+    <Card title="Privacy & data" icon={ShieldCheck}>
+      <div className="flex items-center justify-between py-2.5">
+        <div>
+          <p className="text-sm font-medium">Product analytics</p>
+          <p className="text-xs text-muted-foreground">
+            Anonymous usage stats (PostHog) that help us improve TROVE
+          </p>
+        </div>
+        <button
+          role="switch"
+          aria-checked={analytics}
+          onClick={toggle}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+            analytics ? "bg-gradient-brand" : "bg-surface-elevated ring-1 ring-border"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
+              analytics ? "left-[1.375rem]" : "left-0.5"
+            }`}
+          />
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        How we handle your data:{" "}
+        <a
+          href="https://www.welovetrove.co.za/legal/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          Privacy Policy
+        </a>
+      </p>
     </Card>
   );
 }

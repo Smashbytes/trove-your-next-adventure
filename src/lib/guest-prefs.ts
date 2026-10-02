@@ -11,6 +11,9 @@ export interface GuestPrefs {
   gender: string | null;
   notifs: { recommendations: boolean; reminders: boolean; trending: boolean };
   onboarded: boolean;
+  /** PostHog product analytics — on by default (Privacy Policy: legitimate
+   * interest, anonymised), switchable in Settings → Privacy & data. */
+  analytics: boolean;
 }
 
 const DEFAULTS: GuestPrefs = {
@@ -20,6 +23,7 @@ const DEFAULTS: GuestPrefs = {
   gender: null,
   notifs: { recommendations: true, reminders: true, trending: true },
   onboarded: false,
+  analytics: true,
 };
 
 export function getGuestPrefs(): GuestPrefs {
