@@ -13,10 +13,15 @@ import { useFriends, useFriendsGoing } from "@/lib/friends-api";
 import { useCreateSplit, useGroupMembers, useMyGroups } from "@/lib/spark-api";
 import { useSavedIds, useToggleSave } from "@/lib/social";
 import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
+import { fetchSpotOg, guestShareUrl, shareLink, spotOgMeta } from "@/lib/share";
 import { useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
-  head: ({ params }) => {
+  // Runs in the SSR worker on first load — that's what link-preview crawlers
+  // (WhatsApp, Facebook, X) see, since they don't execute JS.
+  loader: async ({ params }) => ({ og: await fetchSpotOg(params.id) }),
+  head: ({ params, loaderData }) => {
+    if (loaderData?.og) return { meta: spotOgMeta(loaderData.og) };
     const s = getSpot(params.id);
     return { meta: [{ title: s ? `${s.name} — TROVE` : "Spot — TROVE" }, { name: "description", content: s?.tagline ?? "" }] };
   },
@@ -144,22 +149,14 @@ function SpotPage() {
 
   async function share() {
     if (!spot) return;
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const data = {
+    // Demo spots aren't in the DB, so they can't get a short link.
+    const url = demo ? window.location.href : await guestShareUrl(id, isAuthenticated);
+    const outcome = await shareLink({
       title: spot.name,
       text: `${spot.name} on TROVE — ${spot.tagline || "let's go"}`,
       url,
-    };
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share(data);
-      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        toast.success("Link copied to clipboard");
-      }
-    } catch {
-      /* user dismissed the share sheet — no-op */
-    }
+    });
+    if (outcome === "copied") toast.success("Link copied to clipboard");
   }
 
   return (
