@@ -13,8 +13,8 @@ import { useFriends, useFriendsGoing } from "@/lib/friends-api";
 import { useCreateSplit, useGroupMembers, useMyGroups } from "@/lib/spark-api";
 import { useSavedIds, useToggleSave } from "@/lib/social";
 import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
-import { fetchSpotOg, guestShareUrl, shareLink, spotOgMeta } from "@/lib/share";
-import { useState, useMemo } from "react";
+import { fetchSpotOg, guestShareUrl, rememberShareRef, shareLink, spotOgMeta } from "@/lib/share";
+import { useEffect, useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
   // Runs in the SSR worker on first load — that's what link-preview crawlers
@@ -43,6 +43,11 @@ function SpotPage() {
   const saved = savedIds.includes(id);
   const { isAuthenticated, openAuthModal } = useAuth();
   const demo = useIsDemo();
+
+  // Arrived via a TROVE short link? Remember it so the booking gets credited.
+  useEffect(() => {
+    rememberShareRef(id, new URLSearchParams(window.location.search).get("ref"));
+  }, [id]);
 
   // Live split flow — real linked friends, filterable by friend group.
   const { data: friendRows = [] } = useFriends();

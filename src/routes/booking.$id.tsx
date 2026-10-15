@@ -7,8 +7,8 @@ import { useBooking, useCancelBooking, useMarkSplitPaid } from "@/lib/bookings-a
 import { useIsDemo } from "@/lib/listings-api";
 import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
 import { formatDate, formatPrice, formatTime } from "@/lib/spots";
-import { guestShareUrl, shareLink } from "@/lib/share";
-import { useState } from "react";
+import { attributeBookingShare, guestShareUrl, shareLink } from "@/lib/share";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/booking/$id")({
   head: () => ({ meta: [{ title: "Your Ticket — TROVE" }] }),
@@ -27,6 +27,13 @@ function BookingPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [rating, setRating] = useState(5);
   const [reviewBody, setReviewBody] = useState("");
+
+  // Credit the share link that brought this guest here (no-op without one).
+  const listingId = spot?.id;
+  useEffect(() => {
+    if (demo || !listingId) return;
+    void attributeBookingShare(id, listingId);
+  }, [demo, id, listingId]);
 
   if (isLoading) {
     return (

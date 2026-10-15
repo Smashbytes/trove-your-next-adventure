@@ -4,6 +4,8 @@
 //    og:image pointing at the `og-image` edge fn (branded 1200×630 JPEG).
 //  • Short links: welovetrove.co.za/s/<code> → `share-redirect` edge fn →
 //    /spot/<id>?ref=<code>. Minted by the get_share_link RPC (migration 0027).
+//  • Attribution: the ref is remembered and credited to the booking from the
+//    ticket page (attribute_booking_share, migration 0028).
 import { supabase } from "./supabase";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -120,6 +122,63 @@ export async function guestShareUrl(listingId: string, signedIn: boolean): Promi
   });
   if (error || !data?.code) return spotUrl(listingId);
   return SHORT_LINK_BASE + data.code;
+}
+
+// ---------------------------------------------------------------------------
+// Attribution — which short link led to a booking
+// ---------------------------------------------------------------------------
+// share-redirect lands guests on /spot/<id>?ref=<code>. We remember the code
+// per listing (last click wins, 30-day window) and, once the guest is looking
+// at their ticket, hand it to attribute_booking_share (migration 0028).
+
+const REF_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REF_CODE_RE = /^[A-Za-z0-9]{4,16}$/;
+const refKey = (listingId: string) => `trove.share-ref.${listingId}`;
+
+export function rememberShareRef(listingId: string, code: string | null) {
+  if (!code || !REF_CODE_RE.test(code)) return;
+  try {
+    localStorage.setItem(refKey(listingId), JSON.stringify({ code, at: Date.now() }));
+  } catch {
+    /* storage blocked — attribution is best-effort */
+  }
+}
+
+function peekShareRef(listingId: string): string | null {
+  try {
+    const raw = localStorage.getItem(refKey(listingId));
+    if (!raw) return null;
+    const { code, at } = JSON.parse(raw) as { code: string; at: number };
+    if (Date.now() - at > REF_TTL_MS || !REF_CODE_RE.test(code)) {
+      localStorage.removeItem(refKey(listingId));
+      return null;
+    }
+    return code;
+  } catch {
+    return null;
+  }
+}
+
+/** Credit a booking to the share link the guest arrived through, if any. */
+export async function attributeBookingShare(bookingId: string, listingId: string): Promise<void> {
+  const code = peekShareRef(listingId);
+  if (!code) return;
+  const { error } = await (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: boolean | null; error: unknown }>)("attribute_booking_share", {
+    p_booking_id: bookingId,
+    p_code: code,
+  });
+  // Any definitive answer (attributed, already attributed, or not eligible)
+  // consumes the ref; a network error leaves it for the next ticket view.
+  if (!error) {
+    try {
+      localStorage.removeItem(refKey(listingId));
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export type ShareOutcome = "shared" | "copied" | "dismissed" | "failed";
