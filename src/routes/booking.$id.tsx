@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star } from "lucide-react";
+import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useBooking, useCancelBooking, useMarkSplitPaid } from "@/lib/bookings-api";
 import { useIsDemo } from "@/lib/listings-api";
 import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
 import { formatDate, formatPrice, formatTime } from "@/lib/spots";
+import { guestShareUrl, shareLink } from "@/lib/share";
 import { useState } from "react";
 
 export const Route = createFileRoute("/booking/$id")({
@@ -103,6 +104,32 @@ function BookingPage() {
           </>
         )}
       </motion.div>
+
+      {/* Share loop — confirmed bookings only */}
+      {isActive && !demo && (
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+          onClick={async () => {
+            const url = await guestShareUrl(spot.id, true);
+            const outcome = await shareLink({
+              title: spot.name,
+              text: `I'm going to ${spot.name} — come through! 🎟️`,
+              url,
+            });
+            if (outcome === "copied") toast.success("Link copied — paste it in the group chat");
+          }}
+          className="mt-6 flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-primary/20 to-accent/15 p-4 text-left ring-1 ring-primary/30"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+            <Share2 className="h-5 w-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-semibold">Tell your crew</span>
+            <span className="block text-xs text-muted-foreground">Share to WhatsApp, IG or anywhere — they'll see the full event card.</span>
+          </span>
+        </motion.button>
+      )}
 
       {/* Ticket */}
       <motion.div
