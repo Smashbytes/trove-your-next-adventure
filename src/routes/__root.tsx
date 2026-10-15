@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { AuthModal } from "@/components/AuthModal";
-import { SplitPrompt } from "@/components/SplitPrompt";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { queryClient } from "@/lib/query-client";
 
 import appCss from "../styles.css?url";
@@ -16,15 +16,35 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#0a0612" },
       { title: "TROVE — Decide. Book. Show Up." },
-      { name: "description", content: "Discover and book South Africa's best nightlife, comedy and adventures in seconds." },
+      {
+        name: "description",
+        content:
+          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
+      },
       { property: "og:title", content: "TROVE — Decide. Book. Show Up." },
-      { property: "og:description", content: "Discover and book South Africa's best nightlife, comedy and adventures in seconds." },
+      {
+        property: "og:description",
+        content:
+          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "TROVE — Decide. Book. Show Up." },
-      { name: "twitter:description", content: "Discover and book South Africa's best nightlife, comedy and adventures in seconds." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png" },
+      {
+        name: "twitter:description",
+        content:
+          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -33,7 +53,10 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Poppins:wght@400;500;600;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Poppins:wght@400;500;600;700&display=swap",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -47,7 +70,10 @@ function NotFoundComponent() {
       <div>
         <h1 className="font-display text-7xl text-gradient">404</h1>
         <p className="mt-3 text-muted-foreground">This spot doesn't exist (yet).</p>
-        <a href="/" className="mt-6 inline-flex rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">
+        <a
+          href="/"
+          className="mt-6 inline-flex rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow"
+        >
           Back to Discover
         </a>
       </div>
@@ -75,7 +101,7 @@ function AppWithAuth() {
     <>
       <Outlet />
       <AuthModal open={showAuthModal} onClose={closeAuthModal} />
-      <SplitPrompt />
+      <NotificationCenter />
       <Toaster position="top-center" richColors />
     </>
   );

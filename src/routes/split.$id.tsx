@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft, Check, Clock, Loader2, Lock, PartyPopper, ShieldCheck,
@@ -98,6 +98,7 @@ function SplitPage() {
         )}
 
         <StatusBanner split={split} isInitiator={isInitiator} />
+        {split.status === "ready" && split.expiresAt && <HoldCountdown expiresAt={split.expiresAt} />}
 
         {/* Participants */}
         <section className="rounded-2xl bg-surface p-4 ring-1 ring-border">
@@ -152,7 +153,7 @@ function StatusBanner({ split, isInitiator }: { split: SplitDetail; isInitiator:
     ready: {
       icon: <ShieldCheck className="h-5 w-5 text-success" />,
       title: "Everyone's in — time to pay",
-      body: "The tickets are reserved. Each person pays their share within 45 minutes.",
+      body: "The tickets are reserved. Each person pays their share within 15 minutes.",
       tone: "ring-primary/40 bg-gradient-soft",
     },
     completed: {
@@ -192,6 +193,36 @@ function StatusBanner({ split, isInitiator }: { split: SplitDetail; isInitiator:
         <p className="text-sm font-semibold">{s.title}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{s.body}</p>
       </div>
+    </div>
+  );
+}
+
+function HoldCountdown({ expiresAt }: { expiresAt: string }) {
+  const target = new Date(expiresAt).getTime();
+  const [remainingMs, setRemainingMs] = useState(() => target - Date.now());
+
+  useEffect(() => {
+    const tick = () => setRemainingMs(target - Date.now());
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [target]);
+
+  const expired = remainingMs <= 0;
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const ss = String(totalSeconds % 60).padStart(2, "0");
+
+  return (
+    <div className={`flex items-center justify-between rounded-2xl px-4 py-2.5 ring-1 ${
+      expired ? "ring-destructive/40 bg-destructive/10" : "ring-border bg-surface"
+    }`}>
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Clock className="h-3.5 w-3.5" /> {expired ? "Hold expired" : "Pay before the hold expires"}
+      </span>
+      <span className={`font-mono text-sm font-semibold ${expired ? "text-destructive" : "text-foreground"}`}>
+        {expired ? "00:00" : `${mm}:${ss}`}
+      </span>
     </div>
   );
 }

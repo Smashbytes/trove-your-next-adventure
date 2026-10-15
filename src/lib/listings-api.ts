@@ -139,6 +139,7 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     lat: row.lat ?? 0,
     lng: row.lng ?? 0,
     tags: meta.tags ?? row.amenities ?? [],
+    customQuestions: (row as unknown as { custom_questions?: Spot["customQuestions"] }).custom_questions ?? [],
   };
 }
 

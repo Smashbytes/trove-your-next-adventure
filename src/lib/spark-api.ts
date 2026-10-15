@@ -501,6 +501,8 @@ export interface SplitDetail {
   feePerShareKobo: number;
   status: SplitStatus;
   createdAt: string;
+  /** When the reserved booking's payment window closes (status "ready" only). */
+  expiresAt: string | null;
   participants: SplitParticipantRow[];
 }
 
@@ -520,7 +522,12 @@ export function useSplit(splitId: string | undefined) {
         .maybeSingle();
       if (error) throw error;
       if (!bill) return null;
-      const { data: parts, error: pErr } = await supabase.rpc("split_participants", { p_split: splitId! });
+      const [{ data: parts, error: pErr }, { data: booking }] = await Promise.all([
+        supabase.rpc("split_participants", { p_split: splitId! }),
+        bill.booking_id
+          ? supabase.from("bookings").select("pending_expires_at").eq("id", bill.booking_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
       if (pErr) throw pErr;
       return {
         id: bill.id,
@@ -532,6 +539,7 @@ export function useSplit(splitId: string | undefined) {
         feePerShareKobo: bill.fee_per_share_kobo,
         status: bill.status,
         createdAt: bill.created_at,
+        expiresAt: booking?.pending_expires_at ?? null,
         participants: (parts ?? []).map((p) => ({
           shareId: p.share_id,
           userId: p.user_id,

@@ -154,6 +154,9 @@ export interface CreateBookingArgs {
   paymentMethod?: "card" | "eft" | "wallet";
   split?: { participants: SplitParticipant[]; perPerson: number };
   invites?: Array<{ user_id?: string; email?: string; phone?: string }>;
+  deliveryMethod?: "email" | "whatsapp";
+  termsAccepted?: boolean;
+  customAnswers?: Record<string, string>;
 }
 
 export function useCreateBooking() {
@@ -183,6 +186,10 @@ export function useCreateBooking() {
           party_size: args.qty,
           attested_age: args.attestedAge ?? false,
           invites: args.invites,
+          delivery_method: args.deliveryMethod ?? "email",
+          guest_phone: args.buyer?.phone,
+          terms_accepted: args.termsAccepted ?? false,
+          custom_answers: args.customAnswers ?? {},
         },
       });
       if (error) {
@@ -208,6 +215,9 @@ export interface InitPaymentArgs {
   qty: number;
   attestedAge?: boolean;
   buyer: { name: string; phone: string; idNumber: string; idType: "ID" | "PASSPORT" };
+  deliveryMethod?: "email" | "whatsapp";
+  termsAccepted?: boolean;
+  customAnswers?: Record<string, string>;
 }
 
 /**
@@ -216,7 +226,11 @@ export interface InitPaymentArgs {
  * happens server-side via the paystack-webhook.
  */
 export function useInitializePayment() {
-  return useMutation<{ authorizationUrl: string; bookingId: string }, Error, InitPaymentArgs>({
+  return useMutation<
+    { authorizationUrl: string; bookingId: string; checkoutExpiresAt: string },
+    Error,
+    InitPaymentArgs
+  >({
     mutationFn: async (args) => {
       const { data, error } = await supabase.functions.invoke("tradesafe-initialize", {
         body: {
@@ -227,6 +241,9 @@ export function useInitializePayment() {
           buyer_phone: args.buyer.phone,
           buyer_id_number: args.buyer.idNumber,
           buyer_id_type: args.buyer.idType,
+          delivery_method: args.deliveryMethod ?? "email",
+          terms_accepted: args.termsAccepted ?? false,
+          custom_answers: args.customAnswers ?? {},
         },
       });
       if (error) {
@@ -240,8 +257,8 @@ export function useInitializePayment() {
         } catch { /* ignore */ }
         throw new Error(msg);
       }
-      const d = data as { checkout_url: string; booking_id: string };
-      return { authorizationUrl: d.checkout_url, bookingId: d.booking_id };
+      const d = data as { checkout_url: string; booking_id: string; checkout_expires_at: string };
+      return { authorizationUrl: d.checkout_url, bookingId: d.booking_id, checkoutExpiresAt: d.checkout_expires_at };
     },
   });
 }

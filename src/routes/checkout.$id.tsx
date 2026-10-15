@@ -2,13 +2,13 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ShieldCheck, CreditCard, Wallet, Building2,
-  Loader2, AlertTriangle, Lock, ChevronRight, Check,
+  Loader2, AlertTriangle, Lock, ChevronRight, Check, Mail, MessageCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatPrice, formatDate, formatTime } from "@/lib/spots";
 import { useIsDemo, useListing } from "@/lib/listings-api";
 import { useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
-import { clearCheckoutIntent, getCheckoutIntent, type CheckoutIntent } from "@/lib/store";
+import { clearCheckoutIntent, getCheckoutIntent, setPendingPayment, type CheckoutIntent } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/checkout/$id")({
@@ -16,8 +16,12 @@ export const Route = createFileRoute("/checkout/$id")({
   component: CheckoutPage,
 });
 
-type Step = "details" | "payment" | "processing" | "failed";
+type Step = "details" | "loading" | "payment" | "processing" | "failed";
 type PayMethod = "card" | "eft" | "wallet";
+type DeliveryMethod = "email" | "whatsapp";
+
+const WHATSAPP_DELIVERY_FEE_RAND = 5;
+const CHECKOUT_HOLD_MIN = 15;
 
 function CheckoutPage() {
   const { id } = useParams({ from: "/checkout/$id" });
@@ -32,11 +36,15 @@ function CheckoutPage() {
   const [step, setStep] = useState<Step>("details");
 
   // Buyer details
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [idType, setIdType] = useState<"ID" | "PASSPORT">("ID");
   const [idNumber, setIdNumber] = useState("");
+  const [delivery, setDelivery] = useState<DeliveryMethod>("email");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
 
   // Payment fields (mock)
   const [method, setMethod] = useState<PayMethod>("card");
@@ -57,7 +65,11 @@ function CheckoutPage() {
 
   // Prefill buyer details from the signed-in account.
   useEffect(() => {
-    if (profile?.full_name) setName((n) => n || profile.full_name!);
+    if (profile?.full_name) {
+      const [first, ...rest] = profile.full_name.trim().split(/\s+/);
+      setFirstName((f) => f || first || "");
+      setLastName((l) => l || rest.join(" "));
+    }
     if (user?.email) setEmail((e) => e || user.email!);
   }, [profile?.full_name, user?.email]);
 
@@ -69,20 +81,34 @@ function CheckoutPage() {
   // Paid + live (non-demo) listings settle through TradeSafe's hosted checkout;
   // demo/free bookings use the in-app mock flow.
   const isTradeSafe = !demo && intent.total > 0;
+  const questions = spot.customQuestions ?? [];
+  // Free/demo bookings have no payment rail for a standalone fee — the R5
+  // WhatsApp delivery fee only actually applies to paid TradeSafe checkouts.
+  const deliveryFee = isTradeSafe && delivery === "whatsapp" ? WHATSAPP_DELIVERY_FEE_RAND : 0;
+  const total = intent.total + deliveryFee;
 
   const detailsValid =
-    name.trim().length >= 2 &&
+    firstName.trim().length >= 1 &&
+    lastName.trim().length >= 1 &&
     /^\S+@\S+\.\S+$/.test(email) &&
     phone.trim().replace(/\D/g, "").length >= 7 &&
-    idNumber.trim().length >= 4;
+    (!isTradeSafe || idNumber.trim().length >= 4) &&
+    (delivery !== "whatsapp" || phone.trim().replace(/\D/g, "").length >= 7) &&
+    questions.every((q) => !q.required || (customAnswers[q.id] ?? "").trim().length > 0);
 
   // TradeSafe checkout collects payment details on its hosted secure page.
   // page, so there's nothing to validate here. The mock card form only gates
   // the demo/free flow.
   const paymentValid =
-    isTradeSafe ||
-    method !== "card" ||
-    (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3);
+    termsAccepted &&
+    (isTradeSafe ||
+      method !== "card" ||
+      (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3));
+
+  function goToPayment() {
+    setStep("loading");
+    window.setTimeout(() => setStep("payment"), 550);
+  }
 
   async function processPayment() {
     if (!spot || !intent) return;
@@ -91,12 +117,26 @@ function CheckoutPage() {
     try {
       // Paid live listings go through TradeSafe; demo + free use the
       // direct booking path.
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       if (isTradeSafe) {
-        const { authorizationUrl } = await initPayment.mutateAsync({
+        const { authorizationUrl, bookingId, checkoutExpiresAt } = await initPayment.mutateAsync({
           listingId: spot.id,
           qty: intent.qty,
           attestedAge: true,
-          buyer: { name, phone, idNumber, idType },
+          buyer: { name: fullName, phone, idNumber, idType },
+          deliveryMethod: delivery,
+          termsAccepted,
+          customAnswers,
+        });
+        // Stash the booking before we leave the app — TradeSafe returns the
+        // payer to a static URL with no booking context, so /payment/return
+        // has nothing else to go on.
+        setPendingPayment({
+          bookingId,
+          spotId: spot.id,
+          total,
+          expiresAt: checkoutExpiresAt,
+          startedAt: Date.now(),
         });
         clearCheckoutIntent();
         window.location.href = authorizationUrl;
@@ -107,9 +147,12 @@ function CheckoutPage() {
         qty: intent.qty,
         total: intent.total,
         attestedAge: true,
-        buyer: { name, email, phone },
+        buyer: { name: fullName, email, phone },
         paymentMethod: method,
         split: intent.split,
+        deliveryMethod: delivery,
+        termsAccepted,
+        customAnswers,
       });
       clearCheckoutIntent();
       navigate({ to: "/booking/$id", params: { id: bookingId } });
@@ -137,7 +180,7 @@ function CheckoutPage() {
           {(["details", "payment", "confirm"] as const).map((s, i) => {
             const active =
               (s === "details" && step === "details") ||
-              (s === "payment" && step === "payment") ||
+              (s === "payment" && (step === "loading" || step === "payment")) ||
               (s === "confirm" && (step === "processing" || step === "failed"));
             const done =
               (s === "details" && step !== "details") ||
@@ -178,8 +221,9 @@ function CheckoutPage() {
           <div className="border-t border-border px-4 py-3 text-xs space-y-1.5">
             <Row label={`Tickets × ${intent.qty}`} value={formatPrice(intent.total)} />
             <Row label="Service fee" value={formatPrice(0)} muted />
+            {deliveryFee > 0 && <Row label="WhatsApp delivery" value={formatPrice(deliveryFee)} muted />}
             <div className="border-t border-dashed border-border pt-2">
-              <Row label="Total" value={formatPrice(intent.total)} bold />
+              <Row label="Total" value={formatPrice(total)} bold />
               {intent.split && (
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Split with {intent.split.participants.length - 1} friend(s) · {formatPrice(intent.split.perPerson)} each
@@ -198,13 +242,22 @@ function CheckoutPage() {
               className="space-y-3"
             >
               <h2 className="font-display text-lg">Your details</h2>
-              <Field label="Full name">
-                <input
-                  value={name} onChange={(e) => setName(e.target.value)}
-                  placeholder="Sipho Dlamini" autoComplete="name"
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                />
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="First name">
+                  <input
+                    value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Sipho" autoComplete="given-name"
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  />
+                </Field>
+                <Field label="Last name">
+                  <input
+                    value={lastName} onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Dlamini" autoComplete="family-name"
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  />
+                </Field>
+              </div>
               <Field label="Email">
                 <input
                   value={email} onChange={(e) => setEmail(e.target.value)}
@@ -219,30 +272,108 @@ function CheckoutPage() {
                   className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
                 />
               </Field>
-              <div className="grid grid-cols-[0.8fr_1.2fr] gap-3">
-                <Field label="ID type">
-                  <select
-                    value={idType}
-                    onChange={(e) => setIdType(e.target.value as "ID" | "PASSPORT")}
-                    className="w-full bg-transparent text-sm outline-none"
+
+              {isTradeSafe && (
+                <>
+                  <div className="grid grid-cols-[0.8fr_1.2fr] gap-3">
+                    <Field label="ID type">
+                      <select
+                        value={idType}
+                        onChange={(e) => setIdType(e.target.value as "ID" | "PASSPORT")}
+                        className="w-full bg-transparent text-sm outline-none"
+                      >
+                        <option value="ID">ID number</option>
+                        <option value="PASSPORT">Passport</option>
+                      </select>
+                    </Field>
+                    <Field label={idType === "ID" ? "ID number" : "Passport number"}>
+                      <input
+                        value={idNumber}
+                        onChange={(e) => setIdNumber(e.target.value)}
+                        autoComplete="off"
+                        className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                      />
+                    </Field>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Required by TradeSafe, our secure payment provider, to verify who's paying.
+                  </p>
+                </>
+              )}
+
+              {/* Host-defined extra questions */}
+              {questions.map((q) => (
+                <Field key={q.id} label={q.required ? `${q.label} *` : q.label}>
+                  {q.type === "select" ? (
+                    <select
+                      value={customAnswers[q.id] ?? ""}
+                      onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                      className="w-full bg-transparent text-sm outline-none"
+                    >
+                      <option value="">Select…</option>
+                      {(q.options ?? []).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : q.type === "textarea" ? (
+                    <textarea
+                      value={customAnswers[q.id] ?? ""}
+                      onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                      rows={2}
+                      className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                    />
+                  ) : (
+                    <input
+                      value={customAnswers[q.id] ?? ""}
+                      onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                      className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                    />
+                  )}
+                </Field>
+              ))}
+
+              {/* Ticket delivery */}
+              <div className="space-y-1.5">
+                <span className="block px-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Ticket delivery
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDelivery("email")}
+                    className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition ${
+                      delivery === "email" ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"
+                    }`}
                   >
-                    <option value="ID">ID number</option>
-                    <option value="PASSPORT">Passport</option>
-                  </select>
-                </Field>
-                <Field label={idType === "ID" ? "ID number" : "Passport number"}>
-                  <input
-                    value={idNumber}
-                    onChange={(e) => setIdNumber(e.target.value)}
-                    autoComplete="off"
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                  />
-                </Field>
+                    <Mail className="h-3.5 w-3.5" /> Email · Free
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDelivery("whatsapp")}
+                    className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition ${
+                      delivery === "whatsapp" ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"
+                    }`}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp · {isTradeSafe ? formatPrice(WHATSAPP_DELIVERY_FEE_RAND) : "Free"}
+                  </button>
+                </div>
               </div>
+
               <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-success" />
-                We'll send your QR ticket to email and WhatsApp.
+                We'll send your QR ticket to your {delivery === "whatsapp" ? "WhatsApp" : "email"}.
               </p>
+            </motion.section>
+          )}
+
+          {/* LOADING (brief transition between steps) */}
+          {step === "loading" && (
+            <motion.section
+              key="loading"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="py-20 text-center"
+            >
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
             </motion.section>
           )}
 
@@ -267,7 +398,7 @@ function CheckoutPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">Secure checkout by TradeSafe</p>
                         <p className="text-[11px] text-muted-foreground">
-                          You'll be redirected to TradeSafe to pay {formatPrice(intent.total)} into escrow.
+                          You'll be redirected to TradeSafe to pay {formatPrice(total)} securely. We hold it until your booking is done.
                         </p>
                       </div>
                     </div>
@@ -330,7 +461,7 @@ function CheckoutPage() {
                 <div className="rounded-2xl bg-surface ring-1 ring-border p-4 text-sm space-y-1">
                   <p className="font-semibold">Instant EFT</p>
                   <p className="text-xs text-muted-foreground">
-                    You'll be redirected to your bank to authorise {formatPrice(intent.total)}.
+                    You'll be redirected to your bank to authorise {formatPrice(total)}.
                   </p>
                 </div>
               )}
@@ -346,6 +477,25 @@ function CheckoutPage() {
                   <Lock className="h-3 w-3" /> Demo checkout — no real charge will be made.
                 </p>
               )}
+
+              <p className="rounded-xl bg-surface-elevated px-3 py-2 text-[11px] text-muted-foreground">
+                Your spot is held for {CHECKOUT_HOLD_MIN} minutes — complete payment before then or it releases back to the pool.
+              </p>
+
+              <label className="flex items-start gap-2 px-1 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                />
+                <span>
+                  I agree to TROVE's{" "}
+                  <a href="https://welovetrove.co.za/legal/terms" target="_blank" rel="noreferrer" className="underline">Terms & Conditions</a>
+                  {" "}and{" "}
+                  <a href="https://welovetrove.co.za/legal/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</a>.
+                </span>
+              </label>
             </motion.section>
           )}
 
@@ -398,12 +548,12 @@ function CheckoutPage() {
             <div className="glass-strong rounded-2xl p-3 shadow-glow flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="text-[10px] text-muted-foreground">Total</div>
-                <div className="font-display text-lg text-gradient">{formatPrice(intent.total)}</div>
+                <div className="font-display text-lg text-gradient">{formatPrice(total)}</div>
               </div>
               {step === "details" ? (
                 <button
                   disabled={!detailsValid}
-                  onClick={() => setStep("payment")}
+                  onClick={goToPayment}
                   className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40 disabled:shadow-none active:scale-[0.98] transition inline-flex items-center justify-center gap-1.5"
                 >
                   Continue <ChevronRight className="h-4 w-4" />
@@ -414,7 +564,7 @@ function CheckoutPage() {
                   onClick={processPayment}
                   className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40 disabled:shadow-none active:scale-[0.98] transition inline-flex items-center justify-center gap-1.5"
                 >
-                  <Lock className="h-4 w-4" /> Pay {formatPrice(intent.total)}
+                  <Lock className="h-4 w-4" /> Pay {formatPrice(total)}
                 </button>
               )}
             </div>

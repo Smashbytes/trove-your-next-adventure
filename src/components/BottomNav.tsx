@@ -1,5 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Compass, Search, Zap, Ticket, User } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useUnreadCount } from "@/lib/notifications-api";
 
 const tabs = [
   { to: "/", label: "Discover", icon: Compass },
@@ -11,6 +13,10 @@ const tabs = [
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const { isAuthenticated } = useAuth();
+  // Notifications live under Profile, so the badge rides that tab — otherwise
+  // the unread count is only visible on Discover and the desktop top bar.
+  const unread = useUnreadCount();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-md px-3 pb-3">
@@ -29,11 +35,18 @@ export function BottomNav() {
                       className={`h-5 w-5 transition ${active ? "text-primary" : "text-muted-foreground"}`}
                       strokeWidth={active ? 2.4 : 1.8}
                     />
-                    <span className={`text-[10px] font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-[10px] font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}
+                    >
                       {t.label}
                     </span>
                     {active && (
                       <span className="absolute -top-1 h-1 w-8 rounded-full bg-gradient-brand shadow-glow" />
+                    )}
+                    {t.to === "/profile" && isAuthenticated && unread > 0 && (
+                      <span className="absolute right-1.5 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-glow">
+                        {unread > 9 ? "9+" : unread}
+                      </span>
                     )}
                   </Link>
                 </li>

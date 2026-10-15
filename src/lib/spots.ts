@@ -107,6 +107,16 @@ export interface Spot {
   lng: number;
   editorsPick?: boolean;
   tags?: string[];
+  /** Host-defined extra checkout questions (Engine "more info"). */
+  customQuestions?: CustomQuestion[];
+}
+
+export interface CustomQuestion {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  options?: string[];
+  required?: boolean;
 }
 
 const friends: Friend[] = [

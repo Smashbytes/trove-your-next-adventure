@@ -1,13 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Bell, Check, X, UserPlus, CalendarCheck, CreditCard, RotateCcw } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Bell, Check, UserPlus, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useAuth } from "@/lib/auth";
 import {
   useNotifications,
   useMarkAllRead,
   describeNotification,
+  notificationSpec,
+  notificationTargets,
   type AppNotification,
 } from "@/lib/notifications-api";
 import { useFriends, useRespondFriend } from "@/lib/friends-api";
@@ -59,7 +60,16 @@ function NotificationsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUnread]);
 
-  const empty = !isLoading && notifs.length === 0 && requests.length === 0;
+  // A pending request is rendered as an actionable card from the friends graph,
+  // so its notification row would be a duplicate of the same thing.
+  const pendingFrom = new Set(requests.map((r) => r.friendId));
+  const rows = notifs.filter((n) => {
+    if (n.type !== "friend_request") return true;
+    const { fromUserId } = notificationTargets(n);
+    return !fromUserId || !pendingFrom.has(fromUserId);
+  });
+
+  const empty = !isLoading && rows.length === 0 && requests.length === 0;
 
   return (
     <ResponsiveShell title="Notifications">
@@ -70,7 +80,7 @@ function NotificationsInner() {
           </div>
           <p className="text-sm font-semibold">You're all caught up</p>
           <p className="max-w-[260px] text-xs text-muted-foreground">
-            Booking updates and friend requests will show up here.
+            Booking updates, split requests and friend requests will show up here.
           </p>
         </div>
       ) : (
@@ -106,7 +116,7 @@ function NotificationsInner() {
           ))}
 
           {/* System notifications */}
-          {notifs.map((n) => (
+          {rows.map((n) => (
             <NotificationRow key={n.id} n={n} />
           ))}
 
@@ -117,36 +127,56 @@ function NotificationsInner() {
   );
 }
 
-const TYPE_ICON: Record<string, LucideIcon> = {
-  booking_confirmed: CalendarCheck,
-  booking_cancelled: CalendarCheck,
-  payment_success: CreditCard,
-  payment_failed: CreditCard,
-  refund_processed: RotateCcw,
+const TONE_ICON: Record<string, string> = {
+  brand: "text-primary",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-destructive",
+  neutral: "text-muted-foreground",
 };
 
 function NotificationRow({ n }: { n: AppNotification }) {
-  const { title, body } = describeNotification(n);
-  const Icon = TYPE_ICON[n.type] ?? Bell;
+  const spec = notificationSpec(n);
+  const { body } = describeNotification(n);
+  const targets = notificationTargets(n);
+  const navigate = useNavigate();
+  const Icon = spec.icon;
+
   const when = new Date(n.created_at).toLocaleDateString("en-ZA", {
     day: "numeric",
     month: "short",
   });
+
+  // Rows deep-link wherever the pop-up would have taken you.
+  const target = (() => {
+    if (spec.action === "split" && targets.splitId) {
+      return () => navigate({ to: "/split/$id", params: { id: targets.splitId! } });
+    }
+    if (spec.action === "booking" && targets.bookingId) {
+      return () => navigate({ to: "/booking/$id", params: { id: targets.bookingId! } });
+    }
+    if (spec.action === "tickets") return () => navigate({ to: "/tickets" });
+    return null;
+  })();
+
+  const Wrapper = target ? "button" : "div";
+
   return (
-    <div
-      className={`flex items-start gap-3 rounded-2xl p-4 ring-1 ${
+    <Wrapper
+      {...(target ? { onClick: target, type: "button" as const } : {})}
+      className={`flex w-full items-start gap-3 rounded-2xl p-4 text-left ring-1 ${
         n.read_at ? "bg-surface/60 ring-border/60" : "bg-surface ring-primary/20"
-      }`}
+      } ${target ? "transition hover:ring-primary/40" : ""}`}
     >
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-elevated ring-1 ring-border">
-        <Icon className="h-4 w-4 text-primary" />
+        <Icon className={`h-4 w-4 ${TONE_ICON[spec.tone]}`} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-sm font-semibold">{spec.title}</p>
         {body && <p className="mt-0.5 text-xs text-muted-foreground">{body}</p>}
         <p className="mt-1 text-[11px] text-muted-foreground/70">{when}</p>
       </div>
       {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
-    </div>
+    </Wrapper>
   );
 }

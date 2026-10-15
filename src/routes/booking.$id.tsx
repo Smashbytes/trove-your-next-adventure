@@ -88,7 +88,7 @@ function BookingPage() {
             </div>
             <h1 className="mt-4 font-display text-3xl">Confirming payment…</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              This updates automatically once TradeSafe confirms the escrow deposit.
+              This updates automatically once TradeSafe confirms your payment.
             </p>
           </>
         ) : isRefundPending ? (

@@ -21,6 +21,7 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpotIdRouteImport } from './routes/spot.$id'
 import { Route as SplitIdRouteImport } from './routes/split.$id'
+import { Route as PaymentReturnRouteImport } from './routes/payment.return'
 import { Route as HostSlugRouteImport } from './routes/host.$slug'
 import { Route as CheckoutIdRouteImport } from './routes/checkout.$id'
 import { Route as BookingIdRouteImport } from './routes/booking.$id'
@@ -85,6 +86,11 @@ const SplitIdRoute = SplitIdRouteImport.update({
   path: '/split/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentReturnRoute = PaymentReturnRouteImport.update({
+  id: '/payment/return',
+  path: '/payment/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HostSlugRoute = HostSlugRouteImport.update({
   id: '/host/$slug',
   path: '/host/$slug',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/payment/return': typeof PaymentReturnRoute
   '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/payment/return': typeof PaymentReturnRoute
   '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/booking/$id': typeof BookingIdRoute
   '/checkout/$id': typeof CheckoutIdRoute
   '/host/$slug': typeof HostSlugRoute
+  '/payment/return': typeof PaymentReturnRoute
   '/split/$id': typeof SplitIdRoute
   '/spot/$id': typeof SpotIdRoute
 }
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/payment/return'
     | '/split/$id'
     | '/spot/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/payment/return'
     | '/split/$id'
     | '/spot/$id'
   id:
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/booking/$id'
     | '/checkout/$id'
     | '/host/$slug'
+    | '/payment/return'
     | '/split/$id'
     | '/spot/$id'
   fileRoutesById: FileRoutesById
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   BookingIdRoute: typeof BookingIdRoute
   CheckoutIdRoute: typeof CheckoutIdRoute
   HostSlugRoute: typeof HostSlugRoute
+  PaymentReturnRoute: typeof PaymentReturnRoute
   SplitIdRoute: typeof SplitIdRoute
   SpotIdRoute: typeof SpotIdRoute
 }
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SplitIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payment/return': {
+      id: '/payment/return'
+      path: '/payment/return'
+      fullPath: '/payment/return'
+      preLoaderRoute: typeof PaymentReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/host/$slug': {
       id: '/host/$slug'
       path: '/host/$slug'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   BookingIdRoute: BookingIdRoute,
   CheckoutIdRoute: CheckoutIdRoute,
   HostSlugRoute: HostSlugRoute,
+  PaymentReturnRoute: PaymentReturnRoute,
   SplitIdRoute: SplitIdRoute,
   SpotIdRoute: SpotIdRoute,
 }

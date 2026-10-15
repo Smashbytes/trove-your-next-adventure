@@ -5,6 +5,7 @@ const SAVED_KEY = "trove:saved";
 const BOOKINGS_KEY = "trove:bookings";
 const FOLLOWS_KEY = "trove:follows";
 const CHECKOUT_KEY = "trove:checkout";
+const PENDING_PAYMENT_KEY = "trove:pending-payment";
 
 export interface SplitParticipant {
   friendId: string;
@@ -38,6 +39,16 @@ export interface CheckoutIntent {
   qty: number;
   total: number;
   split?: { participants: SplitParticipant[]; perPerson: number };
+}
+
+export interface PendingPayment {
+  bookingId: string;
+  spotId: string;
+  /** Rand, for the "paying X" copy on the return screen. */
+  total: number;
+  /** ISO — the 15-minute reservation hold from tradesafe-initialize. */
+  expiresAt?: string;
+  startedAt: number;
 }
 
 type Listener = () => void;
@@ -111,6 +122,41 @@ export function getCheckoutIntent(): CheckoutIntent | null {
 export function clearCheckoutIntent() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(CHECKOUT_KEY);
+}
+
+// Pending TradeSafe payment.
+//
+// TradeSafe's hosted checkout returns the payer to a single static Success /
+// Failure URL configured in the TradeSafe dashboard — there is no way to pass
+// the booking through (`checkoutLink` takes no return-URL argument), and no
+// booking id comes back in the query string. So the booking has to be stashed
+// here *before* we hand the browser to TradeSafe, and read back by
+// /payment/return once the payer lands again.
+//
+// localStorage, not sessionStorage: the payer may well finish on a different
+// tab (3-D Secure and some bank apps break out of the original one), and
+// sessionStorage would be empty there.
+export function setPendingPayment(p: PendingPayment) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(p));
+}
+export function getPendingPayment(): PendingPayment | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = localStorage.getItem(PENDING_PAYMENT_KEY);
+    if (!v) return null;
+    const p = JSON.parse(v) as PendingPayment;
+    // A stash older than a day is abandoned, not in-flight.
+    if (!p?.bookingId || Date.now() - (p.startedAt ?? 0) > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(PENDING_PAYMENT_KEY);
+      return null;
+    }
+    return p;
+  } catch { return null; }
+}
+export function clearPendingPayment() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(PENDING_PAYMENT_KEY);
 }
 
 // Cancellation / refund (mock)
