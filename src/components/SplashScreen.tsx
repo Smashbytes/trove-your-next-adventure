@@ -1,109 +1,126 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import logo from "@/assets/trove-logo.png";
+import { BrandLogo, BrandWordmark, STAGE_GLOW } from "@/components/BrandStage";
 
 const SPLASH_KEY = "trove_splash_seen";
 
+/** Total run time. The logo zooms through at the end and reveals the app. */
+const DURATION_MS = 1650;
+const REDUCED_MS = 450;
+
+/**
+ * Launch animation, once per browser session — inspired by X/Twitter's start-up:
+ * the stage picks up exactly where the boot shell left off (same logo, same
+ * spot), the logo pops and catches a shine, takes a small breath in, then
+ * rockets towards the camera while the black stage dissolves and the app
+ * appears through it. Reduced-motion users get a short fade instead.
+ */
 export function SplashScreen() {
-  // Keep the server and first client render identical. Browser-only session
-  // state is read after hydration so a fresh tab cannot trigger a mismatch.
-  const [show, setShow] = useState(false);
+  // Rendered only in the browser (from the root, after mount), so session state
+  // can be read up front — visible from the very first frame, no gap after the
+  // boot shell.
+  const [show, setShow] = useState(() => {
+    try {
+      return !sessionStorage.getItem(SPLASH_KEY);
+    } catch {
+      return false;
+    }
+  });
+  const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
     if (sessionStorage.getItem(SPLASH_KEY)) return;
+    const prefersReduced = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    setReduced(prefersReduced);
     setShow(true);
+    // Mark it seen only once it has played, so a re-run of this effect (React
+    // dev double-invoke, a quick remount) can never leave it stuck on screen.
     const t = setTimeout(() => {
       sessionStorage.setItem(SPLASH_KEY, "1");
       setShow(false);
-    }, 1700);
-    return () => clearTimeout(t);
+    }, prefersReduced ? REDUCED_MS : DURATION_MS);
+    return () => {
+      clearTimeout(t);
+      setShow(false);
+    };
   }, []);
+
+  const s = DURATION_MS / 1000;
 
   return (
     <AnimatePresence>
       {show && (
         <motion.div
           key="splash"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.35 } }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] grid place-items-center bg-black"
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-[100] grid place-items-center"
+          exit={{ opacity: 0, transition: { duration: 0.15 } }}
         >
-          {/* Ambient radial glow */}
+          {/* Black stage: holds, then dissolves as the logo flies through it */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1.2 }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(circle at 50% 50%, rgba(232,30,140,0.35), transparent 55%)",
-            }}
+            className="absolute inset-0 bg-black"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: reduced ? [1, 1, 0] : [1, 1, 0] }}
+            transition={reduced ? { duration: REDUCED_MS / 1000, times: [0, 0.4, 1] } : { duration: s, times: [0, 0.66, 0.92], ease: "easeIn" }}
           />
 
-          {/* Logo stage */}
+          {/* Breathing brand glow */}
           <motion.div
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{
-              scale: [0.6, 1.12, 1.0, 1.08, 1.0],
-              opacity: [0, 1, 1, 1, 1],
-            }}
-            transition={{
-              duration: 1.2,
-              times: [0, 0.35, 0.55, 0.75, 0.95],
-              ease: ["easeOut", "easeInOut", "easeInOut", "easeInOut"],
-            }}
-            className="relative"
-          >
-            {/* Soft halo behind logo */}
-            <div
-              className="absolute inset-0 -z-10 rounded-full blur-3xl"
-              style={{
-                background:
-                  "radial-gradient(circle, rgba(232,30,140,0.55), rgba(232,30,140,0) 70%)",
-              }}
-            />
+            className="absolute inset-0"
+            style={{ background: STAGE_GLOW }}
+            initial={{ opacity: 1, scale: 1 }}
+            animate={reduced ? { opacity: [1, 0] } : { opacity: [1, 1, 0.9, 0], scale: [1, 1.25, 1.1, 2.6] }}
+            transition={reduced ? { duration: REDUCED_MS / 1000 } : { duration: s, times: [0, 0.3, 0.55, 0.85], ease: "easeInOut" }}
+          />
 
-            {/* Logo with shine sweep mask */}
-            <div className="relative h-32 w-32 overflow-hidden">
-              <img
-                src={logo}
-                alt="TROVE"
-                className="h-full w-full object-contain drop-shadow-[0_0_30px_rgba(232,30,140,0.6)]"
-                style={{
-                  // Feather the outer edge so the logo melts into the dark stage
-                  // instead of showing a hard rectangular/PNG boundary.
-                  maskImage:
-                    "radial-gradient(circle at 50% 50%, #000 58%, rgba(0,0,0,0.55) 78%, transparent 100%)",
-                  WebkitMaskImage:
-                    "radial-gradient(circle at 50% 50%, #000 58%, rgba(0,0,0,0.55) 78%, transparent 100%)",
-                }}
-              />
-              {/* Diagonal shine sweep */}
-              <motion.div
-                initial={{ x: "-150%" }}
-                animate={{ x: "150%" }}
-                transition={{ duration: 0.7, delay: 0.3, ease: "easeInOut" }}
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background:
-                    "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)",
-                  mixBlendMode: "screen",
-                }}
-              />
-            </div>
-
-            {/* Wordmark */}
+          <div className="relative flex flex-col items-center">
+            {/* Logo: pop → breathe in → zoom through the camera */}
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.55, ease: "easeOut" }}
-              className="mt-4 text-center font-display text-2xl tracking-[0.3em] text-white"
+              className="relative"
+              initial={{ scale: 1, opacity: 1 }}
+              animate={
+                reduced
+                  ? { opacity: [1, 0] }
+                  : { scale: [1, 1.1, 1, 0.84, 30], opacity: [1, 1, 1, 1, 0] }
+              }
+              transition={
+                reduced
+                  ? { duration: REDUCED_MS / 1000 }
+                  : {
+                      duration: s,
+                      times: [0, 0.18, 0.36, 0.56, 0.95],
+                      ease: ["easeOut", "easeInOut", "easeInOut", [0.7, 0, 0.84, 0]],
+                    }
+              }
             >
-              TR<span className="text-gradient">O</span>VE
+              <div className="relative h-32 w-32 overflow-hidden">
+                <BrandLogo />
+                {!reduced && (
+                  <motion.div
+                    initial={{ x: "-150%" }}
+                    animate={{ x: "150%" }}
+                    transition={{ duration: 0.55, delay: 0.15, ease: "easeInOut" }}
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)",
+                      mixBlendMode: "screen",
+                    }}
+                  />
+                )}
+              </div>
             </motion.div>
-          </motion.div>
+
+            {/* Wordmark: same place as the boot shell's, bows out before the zoom */}
+            <motion.div
+              className="mt-4"
+              initial={{ opacity: 1, y: 0 }}
+              animate={reduced ? { opacity: [1, 0] } : { opacity: [1, 1, 0], y: [0, 0, 10] }}
+              transition={reduced ? { duration: REDUCED_MS / 1000 } : { duration: s * 0.55, times: [0, 0.6, 1], ease: "easeIn" }}
+            >
+              <BrandWordmark />
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

@@ -7,7 +7,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Zap } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { formatPrice } from "@/lib/spots";
+import { formatPrice } from "@/lib/format";
 import { koboToRand } from "@/lib/listings-api";
 import { splitNeedsAction, useSplitInbox } from "@/lib/spark-api";
 

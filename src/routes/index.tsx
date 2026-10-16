@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { Bell, UserPlus, Search, ChevronRight, Users2, MapPin, Navigation } from "lucide-react";
+import { Bell, UserPlus, Search, ChevronRight, Users2, MapPin, Navigation, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { DiscoverDesktop } from "@/components/desktop/DiscoverDesktop";
 import { Logo } from "@/components/Logo";
 import { SpotCard } from "@/components/SpotCard";
 import { FeaturedRotator } from "@/components/FeaturedRotator";
-import { CITIES } from "@/lib/spots";
+import { CITIES } from "@/lib/format";
 import { useEditorsPicks, useListings, useTopLevelCategories } from "@/lib/listings-api";
 import { useFriends } from "@/lib/friends-api";
 import { useUnreadCount } from "@/lib/notifications-api";
@@ -72,7 +72,7 @@ function MobileDiscover() {
     () => friends.filter((f) => f.status === "accepted"),
     [friends],
   );
-  const { data: picks = [] } = useEditorsPicks();
+  const { data: picks = [], isLoading: picksLoading } = useEditorsPicks();
   // Hero rotation: the TROVE team's curated "Featured" set when it exists, else
   // fall back to the freshest live listing so the hero is never an empty box.
   const rotation = useMemo(
@@ -114,13 +114,17 @@ function MobileDiscover() {
         <div className="flex items-center justify-between">
           <Logo />
           <div className="flex items-center gap-2">
-            <Link to="/search" className="grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
+            <Link to="/search" aria-label="Search" className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
               <Search className="h-4 w-4" />
             </Link>
-            <Link to="/notifications" aria-label="Notifications" className="relative grid h-9 w-9 place-items-center rounded-full bg-surface ring-1 ring-border">
+            <Link
+              to="/notifications"
+              aria-label={isAuthenticated && unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              className="relative grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border"
+            >
               <Bell className="h-4 w-4" />
               {isAuthenticated && unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-glow">
+                <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-foreground shadow-glow">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -129,12 +133,14 @@ function MobileDiscover() {
         </div>
 
         {/* Feed tabs */}
-        <div className="mt-3 flex items-center justify-center gap-6">
+        <div className="mt-3 flex items-center justify-center gap-6" role="group" aria-label="Feed">
           {tabs.map((t) => {
             const isActive = tab === t;
             return (
               <button
                 key={t}
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => setTab(t)}
                 className="relative pb-1.5 text-sm font-semibold"
               >
@@ -160,7 +166,7 @@ function MobileDiscover() {
                 <div className="grid h-[60px] w-[60px] place-items-center rounded-full bg-surface ring-1 ring-dashed ring-primary/40">
                   <UserPlus className="h-5 w-5 text-primary" />
                 </div>
-                <p className="text-[10px] text-muted-foreground">Add</p>
+                <p className="text-xs text-muted-foreground">Add friends</p>
               </Link>
               {acceptedFriends.map((f) => (
                 <Link
@@ -177,7 +183,7 @@ function MobileDiscover() {
                       )}
                     </div>
                   </div>
-                  <p className="max-w-[60px] truncate text-[10px] text-center">
+                  <p className="max-w-[60px] truncate text-xs text-center">
                     {f.name.split(" ")[0]}
                   </p>
                 </Link>
@@ -201,10 +207,12 @@ function MobileDiscover() {
             className="flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-muted-foreground">{timeGreeting}</p>
+              <p className="text-xs font-medium text-muted-foreground">{timeGreeting}</p>
               <h1 className="font-display text-[2rem] leading-tight truncate">Hi, {firstName}!</h1>
             </div>
             <button
+              type="button"
+              aria-label={`City: ${displayCity}. Change city`}
               onClick={() => {
                 document.getElementById("city-filter")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
               }}
@@ -241,21 +249,33 @@ function MobileDiscover() {
           </motion.div>
         )}
 
-        {/* Featured rotator (logged out) — TROVE team's curated Top 5 */}
+        {/* Featured rotator (logged out) — TROVE team's curated Top 5. With
+            nothing featured or live yet, a welcome hero takes its place. */}
         {!isAuthenticated && (
           <section>
-            <FeaturedRotator items={rotation} />
+            {rotation.length > 0 ? (
+              <>
+                <h1 className="sr-only">Discover what's on in South Africa</h1>
+                <FeaturedRotator items={rotation} />
+              </>
+            ) : picksLoading || isLoading ? (
+              <div className="aspect-[5/2] w-full animate-pulse rounded-3xl bg-surface" />
+            ) : (
+              <WelcomeHero />
+            )}
           </section>
         )}
 
         {/* Category pills */}
         <section>
-          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5" role="group" aria-label="Category">
             {categories.map((c) => {
               const isActive = activeCat === c;
               return (
                 <button
                   key={c}
+                  type="button"
+                  aria-pressed={isActive}
                   onClick={() => setActiveCat(c)}
                   className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
                     isActive
@@ -272,20 +292,22 @@ function MobileDiscover() {
 
         {/* City chips */}
         <section id="city-filter">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5" role="group" aria-label="City">
             {cityFilters.map((c) => {
               const isActive = activeCity === c;
               return (
                 <button
                   key={c}
+                  type="button"
+                  aria-pressed={isActive}
                   onClick={() => setActiveCity(c)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                  className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-medium transition ${
                     isActive
                       ? "bg-primary/15 text-primary ring-1 ring-primary/30"
                       : "bg-surface/60 ring-1 ring-border/60 text-muted-foreground"
                   }`}
                 >
-                  {c}
+                  {c === "All" ? "All cities" : c}
                 </button>
               );
             })}
@@ -297,7 +319,7 @@ function MobileDiscover() {
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg">Editor's Picks</h2>
-              <Link to="/search" className="inline-flex items-center text-[11px] text-muted-foreground hover:text-foreground">
+              <Link to="/search" className="inline-flex items-center py-1 text-xs text-muted-foreground hover:text-foreground">
                 See all <ChevronRight className="h-3 w-3" />
               </Link>
             </div>
@@ -323,14 +345,14 @@ function MobileDiscover() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
                   <div className="absolute inset-x-3 top-3">
-                    <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/90">
+                    <span className="rounded-full glass-strong px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/90">
                       {s.subcategory || s.category}
                     </span>
                   </div>
                   <div className="absolute inset-x-0 bottom-0 p-4">
                     <h3 className="font-display text-xl leading-[1.0] text-white drop-shadow-sm">{s.name}</h3>
-                    <p className="mt-1.5 text-[11px] font-medium text-white/80 line-clamp-1">{s.tagline}</p>
-                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+                    <p className="mt-1.5 text-xs font-medium text-white/85 line-clamp-1">{s.tagline}</p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-white/80">
                       {s.city} · {s.area}
                     </p>
                   </div>
@@ -346,7 +368,7 @@ function MobileDiscover() {
             <h2 className="font-display text-lg">
               {activeCat === "All" ? "Tonight's feed" : activeCat}
             </h2>
-            <p className="text-[11px] font-semibold text-muted-foreground">{feed.length} spots</p>
+            <p className="text-xs font-semibold text-muted-foreground">{feed.length} {feed.length === 1 ? "spot" : "spots"}</p>
           </div>
           {isLoading &&
             [0, 1, 2].map((i) => (
@@ -362,20 +384,54 @@ function MobileDiscover() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground/80">
-                  {tab === "With Friends" ? "No crew activity yet" : "Nothing found"}
+                  {tab === "With Friends"
+                    ? "No crew activity yet"
+                    : activeCat === "All" && activeCity === "All"
+                      ? "New spots are on the way"
+                      : "Nothing here yet"}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground max-w-[200px] mx-auto">
+                <p className="mt-1 text-xs text-muted-foreground max-w-[220px] mx-auto">
                   {tab === "With Friends"
                     ? "Invite friends to see where they're heading."
-                    : "Try a different city or category."}
+                    : activeCat === "All" && activeCity === "All"
+                      ? "Hosts are setting up their first events. Check back soon."
+                      : "Try a different city or category."}
                 </p>
               </div>
             </div>
           )}
         </section>
 
-        <p className="pt-4 text-center text-xs text-muted-foreground">You're all caught up. Go outside. ✨</p>
+        {feed.length > 0 && (
+          <p className="pt-4 text-center text-xs text-muted-foreground">You're all caught up. Go outside. ✨</p>
+        )}
       </main>
     </AppShell>
+  );
+}
+
+function WelcomeHero() {
+  return (
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-soft p-5 ring-1 ring-primary/30">
+      <span className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/20 blur-2xl" />
+      <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+        <Sparkles className="h-3.5 w-3.5" /> Discover. Book. Experience.
+      </p>
+      <h1 className="mt-2 font-display text-2xl leading-tight">Find your next night out in South Africa</h1>
+      <p className="mt-1.5 text-sm text-muted-foreground">
+        Events, nightlife, food and adventures, booked in seconds.
+      </p>
+      <div className="mt-4 flex gap-2.5">
+        <Link
+          to="/onboarding"
+          className="inline-flex items-center rounded-full bg-gradient-brand px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-glow"
+        >
+          Join TROVE
+        </Link>
+        <Link to="/search" className="inline-flex items-center rounded-full bg-surface px-4 py-2.5 text-sm font-semibold ring-1 ring-border">
+          Explore
+        </Link>
+      </div>
+    </div>
   );
 }

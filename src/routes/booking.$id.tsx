@@ -3,10 +3,11 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
 import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import { useBooking, useCancelBooking, useMarkSplitPaid } from "@/lib/bookings-api";
 import { useIsDemo } from "@/lib/listings-api";
 import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
-import { formatDate, formatPrice, formatTime } from "@/lib/spots";
+import { formatDate, formatPrice, formatTime } from "@/lib/format";
 import { attributeBookingShare, guestShareUrl, shareLink } from "@/lib/share";
 import { useEffect, useState } from "react";
 
@@ -163,15 +164,15 @@ function BookingPage() {
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-center">
             <div>
-              <div className="text-[10px] uppercase text-muted-foreground">Date</div>
+              <div className="text-2xs uppercase text-muted-foreground">Date</div>
               <div className="mt-0.5 text-sm font-semibold">{formatDate(spot.date)}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase text-muted-foreground">Doors</div>
+              <div className="text-2xs uppercase text-muted-foreground">Doors</div>
               <div className="mt-0.5 text-sm font-semibold">{formatTime(spot.date)}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase text-muted-foreground">Tickets</div>
+              <div className="text-2xs uppercase text-muted-foreground">Tickets</div>
               <div className="mt-0.5 text-sm font-semibold">{booking.qty}</div>
             </div>
           </div>
@@ -187,13 +188,13 @@ function BookingPage() {
             <QRCodeSVG value={`TROVE:${booking.ticketCode}`} size={160} bgColor="#ffffff" fgColor="#0a0612" level="H" />
           </div>
           <p className="mt-3 text-center font-mono text-xs tracking-widest text-muted-foreground">{booking.ticketCode}</p>
-          <p className="mt-1 text-center text-[11px] text-muted-foreground">
+          <p className="mt-1 text-center text-2xs text-muted-foreground">
             {isActive ? `Show at entry · Total ${formatPrice(booking.total)}` :
               isPending ? "Awaiting payment confirmation…" :
               isRefundPending ? "Ticket invalidated · Refund processing" : "Ticket cancelled"}
           </p>
           {booking.paymentRef && (
-            <p className="mt-1 text-center text-[10px] text-muted-foreground/60 font-mono">
+            <p className="mt-1 text-center text-2xs text-muted-foreground/60 font-mono">
               Ref · {booking.paymentRef}
             </p>
           )}
@@ -213,19 +214,19 @@ function BookingPage() {
               </div>
               <div>
                 <h3 className="font-display text-lg">Split with friends</h3>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   {formatPrice(split.perPerson)} per person
                 </p>
               </div>
             </div>
-            <button className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-[11px] font-semibold">
+            <button className="inline-flex items-center gap-1 rounded-full bg-foreground/10 px-3 py-1.5 text-2xs font-semibold">
               <Send className="h-3 w-3" /> Remind
             </button>
           </div>
 
           {/* Progress */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <div className="flex items-center justify-between text-2xs text-muted-foreground">
               <span>{paidCount} of {split.participants.length} paid</span>
               <span className="text-foreground font-semibold">
                 {formatPrice(collected)} / {formatPrice(booking.total)}
@@ -256,16 +257,16 @@ function BookingPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{p.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{formatPrice(split.perPerson)}</p>
+                  <p className="text-2xs text-muted-foreground">{formatPrice(split.perPerson)}</p>
                 </div>
                 {p.friendId === "me" ? (
-                  <span className="rounded-full bg-success/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-success">
+                  <span className="rounded-full bg-success/15 px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-success">
                     Paid
                   </span>
                 ) : (
                   <button
                     onClick={() => markPaid.mutate({ bookingId: booking.id, friendId: p.friendId })}
-                    className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                    className={`rounded-full px-3 py-1 text-2xs font-semibold uppercase tracking-wider transition ${
                       p.paid
                         ? "bg-success/15 text-success"
                         : "bg-foreground/10 text-foreground"
@@ -296,7 +297,7 @@ function BookingPage() {
           ) : (
             <div className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/40 p-4 space-y-2">
               <p className="text-sm font-semibold">Cancel this booking?</p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {formatPrice(booking.total)} will be refunded to your original payment method.
               </p>
               <div className="flex gap-2">
@@ -347,6 +348,7 @@ function BookingPage() {
                 value={reviewBody}
                 onChange={(e) => setReviewBody(e.target.value)}
                 placeholder="How was it? (optional)"
+                aria-label="Your review (optional)"
                 rows={3}
                 className="mt-3 w-full rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
               />
@@ -362,7 +364,7 @@ function BookingPage() {
                     });
                     toast.success("Review posted — thank you!");
                   } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Couldn't post review.");
+                    toast.error(friendlyError(e, "Couldn't post review."));
                   }
                 }}
                 className="mt-3 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"

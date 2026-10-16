@@ -19,11 +19,12 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { DesktopShell } from "./DesktopShell";
 import { RightRail } from "./RightRail";
-import { useEditorsPicks, useListings } from "@/lib/listings-api";
+import { useEditorsPicks, useListings, useTopLevelCategories } from "@/lib/listings-api";
 import { useFriends } from "@/lib/friends-api";
 import { useAuth } from "@/lib/auth";
 import { getGuestPrefs } from "@/lib/guest-prefs";
-import { CITIES, formatDate, formatTime, formatPrice, type Spot } from "@/lib/spots";
+import { CITIES, formatDate, formatTime, formatPrice } from "@/lib/format";
+import type { Spot } from "@/lib/spots";
 
 const CITY_TABS = CITIES.slice(0, 4); // Joburg, Pretoria, Cape Town, Durban
 
@@ -63,12 +64,9 @@ export function DiscoverDesktop() {
   const { data: friends = [] } = useFriends();
   const crew = friends.filter((f) => f.status === "accepted");
 
-  const categories = useMemo(
-    () => Object.keys(CATEGORY_ICONS).filter((c) => allListings.some((s) => s.category === c)),
-    [allListings],
-  );
-  // Fall back to the full set before listings load so the chip row is never empty.
-  const chipCats = categories.length ? categories : Object.keys(CATEGORY_ICONS);
+  // Same category source as the phone layout (the DB), so both show one list.
+  const { names: dbCategories } = useTopLevelCategories();
+  const chipCats = dbCategories.length ? dbCategories : Object.keys(CATEGORY_ICONS);
 
   const trending = useMemo(
     () => [...allListings].sort((a, b) => trendingScore(b) - trendingScore(a)),
@@ -94,6 +92,8 @@ export function DiscoverDesktop() {
               return (
                 <button
                   key={c}
+                  type="button"
+                  aria-pressed={active}
                   onClick={() => setActiveCat(active ? null : c)}
                   className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
                     active
@@ -127,7 +127,7 @@ export function DiscoverDesktop() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{f.name}</p>
-                    <p className="text-[11px] text-muted-foreground">On TROVE</p>
+                    <p className="text-2xs text-muted-foreground">On TROVE</p>
                   </div>
                 </div>
               ))}
@@ -335,13 +335,13 @@ function PickCard({ spot }: { spot: Spot }) {
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
       <div className="absolute inset-x-3 top-3">
-        <span className="rounded-full glass-strong px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/90">
+        <span className="rounded-full glass-strong px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.16em] text-white/90">
           {spot.subcategory || spot.category}
         </span>
       </div>
       <div className="absolute inset-x-0 bottom-0 p-4">
         <h3 className="font-display text-lg leading-tight text-white">{spot.name}</h3>
-        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/80">
+        <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-white/80">
           <MapPin className="h-3 w-3" />
           {spot.area || spot.city}
         </p>
@@ -380,15 +380,15 @@ function TrendingCard({ spot }: { spot: Spot }) {
       </div>
       <div className="space-y-1.5 p-3">
         <h3 className="truncate text-sm font-semibold">{spot.name}</h3>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {formatDate(spot.date)} · {formatTime(spot.date)}
         </p>
         <div className="flex items-center justify-between pt-0.5">
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary">
+          <span className="inline-flex items-center gap-1 text-2xs font-medium text-primary">
             {spot.subcategory || spot.category}
           </span>
           {spot.rating > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">
               <Star className="h-3 w-3 fill-warning text-warning" />
               {spot.rating}
             </span>

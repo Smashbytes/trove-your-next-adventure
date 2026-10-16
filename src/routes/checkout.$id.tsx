@@ -2,14 +2,17 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ShieldCheck, CreditCard, Wallet, Building2,
-  Loader2, AlertTriangle, Lock, ChevronRight, Check, Mail, MessageCircle,
+  Loader2, AlertTriangle, Lock, ChevronRight, Check, Mail, MessageCircle, Ticket,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { formatPrice, formatDate, formatTime } from "@/lib/spots";
+import { useEffect, useRef, useState } from "react";
+import { formatPrice, formatDate, formatTime } from "@/lib/format";
 import { useIsDemo, useListing } from "@/lib/listings-api";
 import { useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
 import { clearCheckoutIntent, getCheckoutIntent, setPendingPayment, type CheckoutIntent } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { friendlyError } from "@/lib/errors";
+import { Field, fieldInputCls } from "@/components/Field";
+import { NotFoundState } from "@/components/NotFoundState";
 
 export const Route = createFileRoute("/checkout/$id")({
   head: () => ({ meta: [{ title: "Checkout — TROVE" }] }),
@@ -19,9 +22,11 @@ export const Route = createFileRoute("/checkout/$id")({
 type Step = "details" | "loading" | "payment" | "processing" | "failed";
 type PayMethod = "card" | "eft" | "wallet";
 type DeliveryMethod = "email" | "whatsapp";
+type DetailErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "idNumber" | "terms" | string, string>>;
 
 const WHATSAPP_DELIVERY_FEE_RAND = 5;
 const CHECKOUT_HOLD_MIN = 15;
+const LEGAL = "https://welovetrove.co.za/legal";
 
 function CheckoutPage() {
   const { id } = useParams({ from: "/checkout/$id" });
@@ -45,12 +50,14 @@ function CheckoutPage() {
   const [delivery, setDelivery] = useState<DeliveryMethod>("email");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<DetailErrors>({});
+  const formRef = useRef<HTMLFormElement>(null);
 
-  // Payment fields (mock)
+  // Demo-account mock payment fields (never shown to real guests)
   const [method, setMethod] = useState<PayMethod>("card");
-  const [cardNumber, setCardNumber] = useState("4242 4242 4242 4242");
-  const [expiry, setExpiry] = useState("12/29");
-  const [cvc, setCvc] = useState("123");
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvc, setCvc] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,60 +77,87 @@ function CheckoutPage() {
       setFirstName((f) => f || first || "");
       setLastName((l) => l || rest.join(" "));
     }
+    if (profile?.phone) setPhone((p) => p || profile.phone!);
     if (user?.email) setEmail((e) => e || user.email!);
-  }, [profile?.full_name, user?.email]);
+  }, [profile?.full_name, profile?.phone, user?.email]);
 
-  if (isLoading) return <div className="p-10 text-center text-muted-foreground">Loading…</div>;
-  if (!spot) return <div className="p-10 text-center">Spot not found.</div>;
+  if (isLoading) {
+    return (
+      <div className="grid min-h-dvh place-items-center" role="status">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading checkout</span>
+      </div>
+    );
+  }
+  if (!spot) return <NotFoundState />;
   if (!isAuthenticated) return <AuthRequired onSignIn={openAuthModal} spotId={id} />;
-  if (!intent) return <div className="p-10 text-center text-muted-foreground">Loading checkout…</div>;
+  if (!intent) return <div className="p-10 text-center text-muted-foreground" role="status">Loading checkout…</div>;
 
-  // Paid + live (non-demo) listings settle through TradeSafe's hosted checkout;
-  // demo/free bookings use the in-app mock flow.
+  // Three flows: paid live listings settle through TradeSafe's hosted checkout;
+  // free live listings are reserved straight away (no payment step); the demo
+  // account keeps the in-app mock payment screen.
   const isTradeSafe = !demo && intent.total > 0;
+  const isFree = !demo && intent.total === 0;
   const questions = spot.customQuestions ?? [];
   // Free/demo bookings have no payment rail for a standalone fee — the R5
   // WhatsApp delivery fee only actually applies to paid TradeSafe checkouts.
   const deliveryFee = isTradeSafe && delivery === "whatsapp" ? WHATSAPP_DELIVERY_FEE_RAND : 0;
   const total = intent.total + deliveryFee;
+  const phoneDigits = phone.replace(/\D/g, "");
 
-  const detailsValid =
-    firstName.trim().length >= 1 &&
-    lastName.trim().length >= 1 &&
-    /^\S+@\S+\.\S+$/.test(email) &&
-    phone.trim().replace(/\D/g, "").length >= 7 &&
-    (!isTradeSafe || idNumber.trim().length >= 4) &&
-    (delivery !== "whatsapp" || phone.trim().replace(/\D/g, "").length >= 7) &&
-    questions.every((q) => !q.required || (customAnswers[q.id] ?? "").trim().length > 0);
+  function validateDetails(): DetailErrors {
+    const e: DetailErrors = {};
+    if (!firstName.trim()) e.firstName = "Enter your first name.";
+    if (!lastName.trim()) e.lastName = "Enter your last name.";
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) e.email = "Enter a valid email address.";
+    if (phoneDigits.length < 9 || phoneDigits.length > 15) e.phone = "Enter a valid mobile number, e.g. 071 234 5678.";
+    if (isTradeSafe) {
+      if (idType === "ID" && !/^\d{13}$/.test(idNumber.replace(/\s/g, ""))) e.idNumber = "A South African ID number has 13 digits.";
+      if (idType === "PASSPORT" && idNumber.trim().length < 6) e.idNumber = "Enter your passport number.";
+    }
+    for (const q of questions) {
+      if (q.required && !(customAnswers[q.id] ?? "").trim()) e[`q:${q.id}`] = "This question needs an answer.";
+    }
+    if (isFree && !termsAccepted) e.terms = "Accept the Terms & Conditions to continue.";
+    return e;
+  }
 
-  // TradeSafe checkout collects payment details on its hosted secure page.
-  // page, so there's nothing to validate here. The mock card form only gates
-  // the demo/free flow.
+  function focusFirstError() {
+    setTimeout(() => {
+      const el = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      el?.focus();
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
+  }
+
+  function submitDetails(e: React.FormEvent) {
+    e.preventDefault();
+    const errs = validateDetails();
+    setErrors(errs);
+    if (Object.keys(errs).length) return focusFirstError();
+    if (isFree) return void processPayment();
+    setStep("loading");
+    window.setTimeout(() => setStep("payment"), 550);
+  }
+
   const paymentValid =
     termsAccepted &&
     (isTradeSafe ||
       method !== "card" ||
       (cardNumber.replace(/\s/g, "").length >= 12 && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3));
 
-  function goToPayment() {
-    setStep("loading");
-    window.setTimeout(() => setStep("payment"), 550);
-  }
-
   async function processPayment() {
     if (!spot || !intent) return;
     setErrorMsg(null);
     setStep("processing");
     try {
-      // Paid live listings go through TradeSafe; demo + free use the
-      // direct booking path.
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       if (isTradeSafe) {
         const { authorizationUrl, bookingId, checkoutExpiresAt } = await initPayment.mutateAsync({
           listingId: spot.id,
           qty: intent.qty,
           attestedAge: true,
-          buyer: { name: fullName, phone, idNumber, idType },
+          buyer: { name: fullName, phone, idNumber: idNumber.replace(/\s/g, ""), idType },
           deliveryMethod: delivery,
           termsAccepted,
           customAnswers,
@@ -148,7 +182,7 @@ function CheckoutPage() {
         total: intent.total,
         attestedAge: true,
         buyer: { name: fullName, email, phone },
-        paymentMethod: method,
+        paymentMethod: demo ? method : undefined,
         split: intent.split,
         deliveryMethod: delivery,
         termsAccepted,
@@ -157,27 +191,29 @@ function CheckoutPage() {
       clearCheckoutIntent();
       navigate({ to: "/booking/$id", params: { id: bookingId } });
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "We couldn't complete your booking.");
+      setErrorMsg(friendlyError(e, "We couldn't complete your booking. Nothing was charged."));
       setStep("failed");
     }
   }
+
+  const steps = isFree ? (["details", "confirm"] as const) : (["details", "payment", "confirm"] as const);
 
   return (
     <div className="mx-auto min-h-screen max-w-md pb-32">
       {/* Header */}
       <header className="sticky top-0 z-30 glass-strong px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
         <div className="flex items-center justify-between">
-          <Link to="/spot/$id" params={{ id: spot.id }} className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
+          <Link to="/spot/$id" params={{ id: spot.id }} aria-label="Back to event" className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h1 className="font-display text-base">Checkout</h1>
-          <div className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <h1 className="font-display text-base">{isFree ? "Reserve your spot" : "Checkout"}</h1>
+          <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Lock className="h-3 w-3" /> Secure
           </div>
         </div>
         {/* Progress */}
-        <div className="mt-3 flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
-          {(["details", "payment", "confirm"] as const).map((s, i) => {
+        <ol className="mt-3 flex items-center gap-1.5 text-xs uppercase tracking-wider" aria-label="Checkout steps">
+          {steps.map((s, i) => {
             const active =
               (s === "details" && step === "details") ||
               (s === "payment" && (step === "loading" || step === "payment")) ||
@@ -186,20 +222,20 @@ function CheckoutPage() {
               (s === "details" && step !== "details") ||
               (s === "payment" && (step === "processing" || step === "failed"));
             return (
-              <div key={s} className="flex flex-1 items-center gap-1.5">
+              <li key={s} className="flex flex-1 items-center gap-1.5" aria-current={active ? "step" : undefined}>
                 <div className={`h-1.5 flex-1 rounded-full ${done || active ? "bg-gradient-brand" : "bg-surface-elevated"}`} />
                 <span className={`${active ? "text-foreground" : "text-muted-foreground"}`}>
                   {i + 1}. {s}
                 </span>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ol>
       </header>
 
       <main className="px-5 pt-5 space-y-5">
         {/* Order summary card */}
-        <section className="overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
+        <section aria-label="Order summary" className="overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
           <div className="flex items-center gap-3 p-3">
             <img
               src={spot.image}
@@ -213,19 +249,18 @@ function CheckoutPage() {
               className="h-16 w-16 rounded-xl object-cover"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-accent">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
+              <p className="text-xs uppercase tracking-wider text-accent">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
               <p className="font-display text-base truncate">{spot.name}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{spot.area} · {spot.city}</p>
+              <p className="text-xs text-muted-foreground truncate">{[spot.area, spot.city].filter(Boolean).join(" · ")}</p>
             </div>
           </div>
-          <div className="border-t border-border px-4 py-3 text-xs space-y-1.5">
-            <Row label={`Tickets × ${intent.qty}`} value={formatPrice(intent.total)} />
-            <Row label="Service fee" value={formatPrice(0)} muted />
+          <div className="border-t border-border px-4 py-3 text-sm space-y-1.5">
+            <Row label={`${isFree ? "Spots" : "Tickets"} × ${intent.qty}`} value={formatPrice(intent.total)} />
             {deliveryFee > 0 && <Row label="WhatsApp delivery" value={formatPrice(deliveryFee)} muted />}
             <div className="border-t border-dashed border-border pt-2">
               <Row label="Total" value={formatPrice(total)} bold />
               {intent.split && (
-                <p className="mt-1 text-[10px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Split with {intent.split.participants.length - 1} friend(s) · {formatPrice(intent.split.perPerson)} each
                 </p>
               )}
@@ -236,66 +271,45 @@ function CheckoutPage() {
         <AnimatePresence mode="wait">
           {/* DETAILS */}
           {step === "details" && (
-            <motion.section
+            <motion.form
               key="details"
+              id="checkout-details"
+              ref={formRef}
+              onSubmit={submitDetails}
+              noValidate
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="space-y-3"
             >
               <h2 className="font-display text-lg">Your details</h2>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="First name">
-                  <input
-                    value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Sipho" autoComplete="given-name"
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                  />
+                <Field label="First name" error={errors.firstName}>
+                  <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Sipho" autoComplete="given-name" maxLength={60} className={fieldInputCls} />
                 </Field>
-                <Field label="Last name">
-                  <input
-                    value={lastName} onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Dlamini" autoComplete="family-name"
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                  />
+                <Field label="Last name" error={errors.lastName}>
+                  <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Dlamini" autoComplete="family-name" maxLength={60} className={fieldInputCls} />
                 </Field>
               </div>
-              <Field label="Email">
-                <input
-                  value={email} onChange={(e) => setEmail(e.target.value)}
-                  type="email" placeholder="you@trove.app" autoComplete="email"
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                />
+              <Field label="Email" error={errors.email}>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" inputMode="email" placeholder="you@email.com" autoComplete="email" maxLength={254} className={fieldInputCls} />
               </Field>
-              <Field label="Mobile (WhatsApp)">
-                <input
-                  value={phone} onChange={(e) => setPhone(e.target.value)}
-                  type="tel" placeholder="+27 71 234 5678" autoComplete="tel"
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                />
+              <Field label="Mobile (WhatsApp)" error={errors.phone}>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="071 234 5678" autoComplete="tel" maxLength={20} className={fieldInputCls} />
               </Field>
 
               {isTradeSafe && (
                 <>
                   <div className="grid grid-cols-[0.8fr_1.2fr] gap-3">
                     <Field label="ID type">
-                      <select
-                        value={idType}
-                        onChange={(e) => setIdType(e.target.value as "ID" | "PASSPORT")}
-                        className="w-full bg-transparent text-sm outline-none"
-                      >
-                        <option value="ID">ID number</option>
+                      <select value={idType} onChange={(e) => setIdType(e.target.value as "ID" | "PASSPORT")} className={fieldInputCls}>
+                        <option value="ID">SA ID</option>
                         <option value="PASSPORT">Passport</option>
                       </select>
                     </Field>
-                    <Field label={idType === "ID" ? "ID number" : "Passport number"}>
-                      <input
-                        value={idNumber}
-                        onChange={(e) => setIdNumber(e.target.value)}
-                        autoComplete="off"
-                        className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                      />
+                    <Field label={idType === "ID" ? "ID number" : "Passport number"} error={errors.idNumber}>
+                      <input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} inputMode={idType === "ID" ? "numeric" : "text"} autoComplete="off" maxLength={20} className={fieldInputCls} />
                     </Field>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Required by TradeSafe, our secure payment provider, to verify who's paying.
                   </p>
                 </>
@@ -303,12 +317,12 @@ function CheckoutPage() {
 
               {/* Host-defined extra questions */}
               {questions.map((q) => (
-                <Field key={q.id} label={q.required ? `${q.label} *` : q.label}>
+                <Field key={q.id} label={q.required ? `${q.label} *` : q.label} error={errors[`q:${q.id}`]}>
                   {q.type === "select" ? (
                     <select
                       value={customAnswers[q.id] ?? ""}
                       onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-                      className="w-full bg-transparent text-sm outline-none"
+                      className={fieldInputCls}
                     >
                       <option value="">Select…</option>
                       {(q.options ?? []).map((opt) => (
@@ -320,50 +334,42 @@ function CheckoutPage() {
                       value={customAnswers[q.id] ?? ""}
                       onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
                       rows={2}
-                      className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                      maxLength={500}
+                      className={`${fieldInputCls} resize-none`}
                     />
                   ) : (
                     <input
                       value={customAnswers[q.id] ?? ""}
                       onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-                      className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                      maxLength={200}
+                      className={fieldInputCls}
                     />
                   )}
                 </Field>
               ))}
 
               {/* Ticket delivery */}
-              <div className="space-y-1.5">
-                <span className="block px-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <fieldset className="space-y-1.5">
+                <legend className="block px-1 pb-1.5 text-xs uppercase tracking-wider text-muted-foreground">
                   Ticket delivery
-                </span>
+                </legend>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDelivery("email")}
-                    className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition ${
-                      delivery === "email" ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"
-                    }`}
-                  >
+                  <ChoiceButton active={delivery === "email"} onClick={() => setDelivery("email")}>
                     <Mail className="h-3.5 w-3.5" /> Email · Free
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDelivery("whatsapp")}
-                    className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-semibold transition ${
-                      delivery === "whatsapp" ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"
-                    }`}
-                  >
+                  </ChoiceButton>
+                  <ChoiceButton active={delivery === "whatsapp"} onClick={() => setDelivery("whatsapp")}>
                     <MessageCircle className="h-3.5 w-3.5" /> WhatsApp · {isTradeSafe ? formatPrice(WHATSAPP_DELIVERY_FEE_RAND) : "Free"}
-                  </button>
+                  </ChoiceButton>
                 </div>
-              </div>
+              </fieldset>
 
-              <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+              <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-success" />
                 We'll send your QR ticket to your {delivery === "whatsapp" ? "WhatsApp" : "email"}.
               </p>
-            </motion.section>
+
+              {isFree && <Terms checked={termsAccepted} onChange={setTermsAccepted} error={errors.terms} />}
+            </motion.form>
           )}
 
           {/* LOADING (brief transition between steps) */}
@@ -372,12 +378,14 @@ function CheckoutPage() {
               key="loading"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="py-20 text-center"
+              role="status"
             >
               <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="sr-only">Loading payment options</span>
             </motion.section>
           )}
 
-          {/* PAYMENT */}
+          {/* PAYMENT (paid TradeSafe listings, and the demo account) */}
           {step === "payment" && (
             <motion.section
               key="payment"
@@ -397,105 +405,51 @@ function CheckoutPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">Secure checkout by TradeSafe</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           You'll be redirected to TradeSafe to pay {formatPrice(total)} securely. We hold it until your booking is done.
                         </p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {["Card", "Instant EFT", "Apple / Google Pay"].map((m) => (
-                        <span key={m} className="rounded-full bg-surface-elevated px-2.5 py-1 text-[10px] text-muted-foreground ring-1 ring-border">
-                          {m}
-                        </span>
-                      ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <Lock className="h-3 w-3 text-success" /> Your card details never touch TROVE.
+                  </p>
+                </div>
+              )}
+
+              {demo && (
+                <>
+                  <div className="grid grid-cols-3 gap-2" role="group" aria-label="Payment method">
+                    <PayTab icon={<CreditCard className="h-4 w-4" />} label="Card" active={method === "card"} onClick={() => setMethod("card")} />
+                    <PayTab icon={<Building2 className="h-4 w-4" />} label="EFT" active={method === "eft"} onClick={() => setMethod("eft")} />
+                    <PayTab icon={<Wallet className="h-4 w-4" />} label="Wallet" active={method === "wallet"} onClick={() => setMethod("wallet")} />
+                  </div>
+                  {method === "card" && (
+                    <div className="space-y-3">
+                      <Field label="Card number">
+                        <input value={cardNumber} onChange={(e) => setCardNumber(formatCard(e.target.value))} inputMode="numeric" autoComplete="off" className={`${fieldInputCls} font-mono tracking-wider`} />
+                      </Field>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Expiry">
+                          <input value={expiry} onChange={(e) => setExpiry(formatExpiry(e.target.value))} placeholder="MM/YY" inputMode="numeric" autoComplete="off" className={`${fieldInputCls} font-mono`} />
+                        </Field>
+                        <Field label="CVC">
+                          <input value={cvc} onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" className={`${fieldInputCls} font-mono`} />
+                        </Field>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                    <Lock className="h-3 w-3 text-success" /> 3-D Secure protected · your card details never touch TROVE.
+                  )}
+                  <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Demo account: no real charge is made.
                   </p>
-                </div>
+                </>
               )}
 
-              {!isTradeSafe && (
-              <div className="grid grid-cols-3 gap-2">
-                <PayTab icon={<CreditCard className="h-4 w-4" />} label="Card" active={method === "card"} onClick={() => setMethod("card")} />
-                <PayTab icon={<Building2 className="h-4 w-4" />} label="EFT" active={method === "eft"} onClick={() => setMethod("eft")} />
-                <PayTab icon={<Wallet className="h-4 w-4" />} label="Wallet" active={method === "wallet"} onClick={() => setMethod("wallet")} />
-              </div>
-              )}
-
-              {!isTradeSafe && method === "card" && (
-                <div className="space-y-3">
-                  <Field label="Card number">
-                    <input
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(formatCard(e.target.value))}
-                      inputMode="numeric"
-                      className="w-full bg-transparent font-mono text-sm tracking-wider outline-none"
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Expiry">
-                      <input
-                        value={expiry}
-                        onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                        placeholder="MM/YY" inputMode="numeric"
-                        className="w-full bg-transparent font-mono text-sm outline-none"
-                      />
-                    </Field>
-                    <Field label="CVC">
-                      <input
-                        value={cvc} onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                        inputMode="numeric"
-                        className="w-full bg-transparent font-mono text-sm outline-none"
-                      />
-                    </Field>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Test mode · Use card ending <span className="font-mono">0000</span> to simulate a failure.
-                  </p>
-                </div>
-              )}
-
-              {!isTradeSafe && method === "eft" && (
-                <div className="rounded-2xl bg-surface ring-1 ring-border p-4 text-sm space-y-1">
-                  <p className="font-semibold">Instant EFT</p>
-                  <p className="text-xs text-muted-foreground">
-                    You'll be redirected to your bank to authorise {formatPrice(total)}.
-                  </p>
-                </div>
-              )}
-              {!isTradeSafe && method === "wallet" && (
-                <div className="rounded-2xl bg-gradient-soft ring-1 ring-primary/30 p-4 text-sm space-y-1">
-                  <p className="font-semibold">TROVE Wallet</p>
-                  <p className="text-xs text-muted-foreground">Balance: {formatPrice(2400)} · Sufficient ✓</p>
-                </div>
-              )}
-
-              {!isTradeSafe && (
-                <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                  <Lock className="h-3 w-3" /> Demo checkout — no real charge will be made.
-                </p>
-              )}
-
-              <p className="rounded-xl bg-surface-elevated px-3 py-2 text-[11px] text-muted-foreground">
-                Your spot is held for {CHECKOUT_HOLD_MIN} minutes — complete payment before then or it releases back to the pool.
+              <p className="rounded-xl bg-surface-elevated px-3 py-2 text-xs text-muted-foreground">
+                Your spot is held for {CHECKOUT_HOLD_MIN} minutes. Complete payment before then or it's released.
               </p>
 
-              <label className="flex items-start gap-2 px-1 text-[11px] text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
-                />
-                <span>
-                  I agree to TROVE's{" "}
-                  <a href="https://welovetrove.co.za/legal/terms" target="_blank" rel="noreferrer" className="underline">Terms & Conditions</a>
-                  {" "}and{" "}
-                  <a href="https://welovetrove.co.za/legal/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</a>.
-                </span>
-              </label>
+              <Terms checked={termsAccepted} onChange={setTermsAccepted} />
             </motion.section>
           )}
 
@@ -505,13 +459,14 @@ function CheckoutPage() {
               key="processing"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="py-16 text-center space-y-4"
+              role="status"
             >
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-brand shadow-glow animate-pulse">
                 <Loader2 className="h-7 w-7 animate-spin text-primary-foreground" />
               </div>
               <div>
-                <p className="font-display text-xl">Processing payment</p>
-                <p className="mt-1 text-xs text-muted-foreground">Securing your spot…</p>
+                <p className="font-display text-xl">{isTradeSafe ? "Taking you to TradeSafe" : "Reserving your spot"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">Securing your spot…</p>
               </div>
             </motion.section>
           )}
@@ -523,18 +478,19 @@ function CheckoutPage() {
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="space-y-4"
             >
-              <div className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/40 p-5 text-center">
+              <div role="alert" className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/40 p-5 text-center">
                 <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-destructive/20">
                   <AlertTriangle className="h-6 w-6 text-destructive" />
                 </div>
-                <p className="mt-3 font-display text-lg">Payment failed</p>
-                <p className="mt-1 text-xs text-muted-foreground">{errorMsg ?? "Something went wrong."}</p>
+                <p className="mt-3 font-display text-lg">{isFree ? "Booking failed" : "Payment failed"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{errorMsg ?? "Something went wrong."}</p>
               </div>
               <button
-                onClick={() => setStep("payment")}
+                type="button"
+                onClick={() => setStep(isFree ? "details" : "payment")}
                 className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
               >
-                Try a different method
+                Try again
               </button>
             </motion.section>
           )}
@@ -547,19 +503,20 @@ function CheckoutPage() {
           <div className="mx-auto max-w-md px-3">
             <div className="glass-strong rounded-2xl p-3 shadow-glow flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-muted-foreground">Total</div>
+                <div className="text-xs text-muted-foreground">Total</div>
                 <div className="font-display text-lg text-gradient">{formatPrice(total)}</div>
               </div>
               {step === "details" ? (
                 <button
-                  disabled={!detailsValid}
-                  onClick={goToPayment}
-                  className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40 disabled:shadow-none active:scale-[0.98] transition inline-flex items-center justify-center gap-1.5"
+                  type="submit"
+                  form="checkout-details"
+                  className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow active:scale-[0.98] transition inline-flex items-center justify-center gap-1.5"
                 >
-                  Continue <ChevronRight className="h-4 w-4" />
+                  {isFree ? <><Ticket className="h-4 w-4" /> Reserve my spot</> : <>Continue <ChevronRight className="h-4 w-4" /></>}
                 </button>
               ) : (
                 <button
+                  type="button"
                   disabled={!paymentValid}
                   onClick={processPayment}
                   className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40 disabled:shadow-none active:scale-[0.98] transition inline-flex items-center justify-center gap-1.5"
@@ -568,9 +525,36 @@ function CheckoutPage() {
                 </button>
               )}
             </div>
+            {step === "payment" && !termsAccepted && (
+              <p className="mt-1.5 text-center text-xs text-muted-foreground">Accept the Terms &amp; Conditions to pay.</p>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Terms({ checked, onChange, error }: { checked: boolean; onChange: (v: boolean) => void; error?: string }) {
+  return (
+    <div>
+      <label className="flex items-start gap-2.5 px-1 py-1 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "terms-error" : undefined}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+        />
+        <span>
+          I agree to TROVE's{" "}
+          <a href={`${LEGAL}/terms`} target="_blank" rel="noopener noreferrer" className="text-foreground underline">Terms &amp; Conditions</a>
+          {" "}and{" "}
+          <a href={`${LEGAL}/privacy`} target="_blank" rel="noopener noreferrer" className="text-foreground underline">Privacy Policy</a>.
+        </span>
+      </label>
+      {error && <p id="terms-error" role="alert" className="mt-1 px-1 text-xs font-medium text-destructive">{error}</p>}
     </div>
   );
 }
@@ -580,10 +564,10 @@ function AuthRequired({ onSignIn, spotId }: { onSignIn: () => void; spotId: stri
     <div className="mx-auto flex min-h-screen max-w-md flex-col">
       <header className="sticky top-0 z-30 glass-strong px-5 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3">
         <div className="flex items-center justify-between">
-          <Link to="/spot/$id" params={{ id: spotId }} className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
+          <Link to="/spot/$id" params={{ id: spotId }} aria-label="Back to event" className="grid h-10 w-10 place-items-center rounded-full bg-surface ring-1 ring-border">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h1 className="font-display text-base">Checkout</h1>
+          <p className="font-display text-base">Checkout</p>
           <span className="w-10" />
         </div>
       </header>
@@ -592,11 +576,12 @@ function AuthRequired({ onSignIn, spotId }: { onSignIn: () => void; spotId: stri
         <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-brand shadow-glow">
           <Lock className="h-7 w-7 text-primary-foreground" />
         </div>
-        <h2 className="mt-5 font-display text-2xl">Sign in to book</h2>
+        <h1 className="mt-5 font-display text-2xl">Sign in to book</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          You need a TROVE account to secure your spot. Your ticket and QR code get tied to it — and we'll keep your selection.
+          You need a TROVE account to secure your spot. Your ticket and QR code get tied to it, and we'll keep your selection.
         </p>
         <button
+          type="button"
           onClick={onSignIn}
           className="mt-6 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow active:scale-[0.98] transition"
         >
@@ -616,24 +601,32 @@ function AuthRequired({ onSignIn, spotId }: { onSignIn: () => void; spotId: stri
 function Row({ label, value, muted, bold }: { label: string; value: string; muted?: boolean; bold?: boolean }) {
   return (
     <div className={`flex items-center justify-between ${muted ? "text-muted-foreground" : ""}`}>
-      <span className={bold ? "font-semibold text-sm" : ""}>{label}</span>
+      <span className={bold ? "font-semibold" : ""}>{label}</span>
       <span className={bold ? "font-display text-base text-gradient" : "font-mono"}>{value}</span>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function ChoiceButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <label className="block rounded-2xl bg-surface ring-1 ring-border px-4 py-2.5 focus-within:ring-primary/60 transition">
-      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="mt-0.5">{children}</div>
-    </label>
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`flex items-center justify-center gap-1.5 rounded-2xl py-3 text-sm font-semibold transition ${
+        active ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
 function PayTab({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <button
+      type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={`relative flex flex-col items-center gap-1 rounded-2xl py-3 text-xs font-semibold transition ${
         active ? "bg-gradient-brand text-primary-foreground shadow-glow-soft" : "bg-surface ring-1 ring-border text-foreground"

@@ -25,14 +25,10 @@ import type {
   ListingWithCapacity,
 } from "./database.types";
 import type { Friend, Spot, Vibe } from "./spots";
-import {
-  spots as mockSpots,
-  getSpot as getMockSpot,
-  getHost as getMockHost,
-  editorsPicks as mockEditorsPicks,
-  CATEGORIES as MOCK_CATEGORIES,
-  CITY_LABELS,
-} from "./spots";
+import { CATEGORIES as MOCK_CATEGORIES, CITY_LABELS, centsToRand } from "./format";
+
+/** The demo catalogue is only downloaded for the showcase account. */
+const loadMock = () => import("./spots");
 import fallbackImage from "@/assets/spot-nightlife.jpg";
 
 export const FALLBACK_IMAGE = fallbackImage;
@@ -62,9 +58,8 @@ export function useIsDemo(): boolean {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function koboToRand(kobo: number | null | undefined): number {
-  return Math.round((kobo ?? 0) / 100);
-}
+/** @deprecated use `centsToRand` (the DB `_kobo` columns hold cents). */
+export const koboToRand = centsToRand;
 
 /** "taboo-night-club" → "Taboo Night Club". Stop-gap host display name. */
 export function prettifySlug(slug: string | null | undefined): string {
@@ -95,6 +90,7 @@ export interface CategoryNode {
 interface ListingExtras {
   categories: Map<string, CategoryNode>;
   hostSlugById: Map<string, string>;
+  hostNameById?: Map<string, string>;
   ratingByListing: Map<string, { avg: number; count: number }>;
   nextSlotByListing?: Map<string, string>;
 }
@@ -106,6 +102,7 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
   const parent = cat?.parentId ? extras.categories.get(cat.parentId) : undefined;
   const rating = extras.ratingByListing.get(row.id);
   const hostSlug = extras.hostSlugById.get(row.host_id) ?? "";
+  const hostName = extras.hostNameById?.get(row.host_id) || prettifySlug(hostSlug);
 
   const metaDate = (meta as { date?: string }).date;
   const nextSlot = extras.nextSlotByListing?.get(row.id);
@@ -124,7 +121,7 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     area: meta.area ?? row.address ?? "",
     date,
     doors: (meta as { doors_open?: string }).doors_open ?? "",
-    price: koboToRand(row.base_price_kobo),
+    price: centsToRand(row.base_price_kobo),
     rating: rating ? Math.round(rating.avg * 10) / 10 : 0,
     reviews: rating?.count ?? 0,
     image: row.cover_url || FALLBACK_IMAGE,
@@ -134,7 +131,8 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     distanceKm: 0,
     friendsGoing: [] as Friend[],
     hours: formatOpeningHours(meta),
-    hostName: prettifySlug(hostSlug),
+    hostName,
+    hostSlug,
     address: row.address ?? "",
     lat: row.lat ?? 0,
     lng: row.lng ?? 0,
@@ -167,7 +165,7 @@ async function enrichListings(rows: ListingWithCapacity[]): Promise<Spot[]> {
 
   const [categories, hostsRes, reviewsRes] = await Promise.all([
     fetchCategories(),
-    supabase.from("host_profiles").select("user_id, slug").in("user_id", hostIds),
+    supabase.from("public_host_profiles").select("user_id, slug, display_name").in("user_id", hostIds),
     supabase.from("reviews").select("of_listing, rating").in("of_listing", listingIds),
   ]);
 
@@ -175,8 +173,10 @@ async function enrichListings(rows: ListingWithCapacity[]): Promise<Spot[]> {
   if (reviewsRes.error) throw reviewsRes.error;
 
   const hostSlugById = new Map<string, string>();
-  for (const h of (hostsRes.data ?? []) as { user_id: string; slug: string }[]) {
+  const hostNameById = new Map<string, string>();
+  for (const h of (hostsRes.data ?? []) as { user_id: string; slug: string; display_name: string | null }[]) {
     hostSlugById.set(h.user_id, h.slug);
+    if (h.display_name) hostNameById.set(h.user_id, h.display_name);
   }
 
   const agg = new Map<string, { sum: number; count: number }>();
@@ -192,7 +192,7 @@ async function enrichListings(rows: ListingWithCapacity[]): Promise<Spot[]> {
     ratingByListing.set(id, { avg: count ? sum / count : 0, count });
   }
 
-  return rows.map((row) => listingToSpot(row, { categories, hostSlugById, ratingByListing }));
+  return rows.map((row) => listingToSpot(row, { categories, hostSlugById, hostNameById, ratingByListing }));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +242,9 @@ export function useTopLevelCategories() {
   return { ...q, names };
 }
 
-function filterMockSpots(filters: ListingFilters): Spot[] {
+async function filterMockSpots(filters: ListingFilters): Promise<Spot[]> {
   const ql = (filters.query ?? "").trim().toLowerCase();
+  const { spots: mockSpots } = await loadMock();
   return mockSpots.filter((s) => {
     if (filters.city && filters.city !== "All" && s.city !== filters.city) return false;
     if (filters.category && filters.category !== "All" && s.category !== filters.category)
@@ -300,13 +301,16 @@ export function useListings(filters: ListingFilters = {}) {
   });
 }
 
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useListing(id: string | undefined) {
   const demo = useIsDemo();
   return useQuery({
     queryKey: [...listingKeys.detail(id), demo],
     enabled: !!id,
     queryFn: async (): Promise<Spot | null> => {
-      if (demo) return getMockSpot(id!) ?? null;
+      if (demo) return (await loadMock()).getSpot(id!) ?? null;
+      if (!UUID_RE.test(id!)) return null;
       const { data, error } = await supabase
         .from("listings_with_capacity")
         .select("*")
@@ -330,6 +334,7 @@ export async function loadSpotsByIds(ids: string[], demo: boolean): Promise<Map<
   const map = new Map<string, Spot>();
   if (ids.length === 0) return map;
   if (demo) {
+    const { getSpot: getMockSpot } = await loadMock();
     for (const id of ids) {
       const s = getMockSpot(id);
       if (s) map.set(id, s);
@@ -373,7 +378,7 @@ export function useListingReviews(listingId: string | undefined) {
     queryKey: [...listingKeys.reviews(listingId), demo],
     enabled: !!listingId,
     queryFn: async () => {
-      if (demo) return [];
+      if (demo || !UUID_RE.test(listingId!)) return [];
       const { data, error } = await supabase
         .from("reviews")
         .select("id, rating, body, created_at, by_user")
@@ -413,7 +418,7 @@ export function useEditorsPicks(limit = 5) {
     staleTime: 5 * 60_000,
     enabled: typeof window !== "undefined",
     queryFn: async () => {
-      if (demo) return mockEditorsPicks();
+      if (demo) return (await loadMock()).editorsPicks();
       // Featured slots live for 48h (reels-style) then reset, so only surface
       // rows added within the window — keyed off created_at so it also expires
       // legacy rows that predate explicit ends_at TTLs.
@@ -443,7 +448,7 @@ export function useHostBySlug(slug: string | undefined) {
     enabled: !!slug,
     queryFn: async () => {
       if (demo) {
-        const h = getMockHost(slug!);
+        const h = (await loadMock()).getHost(slug!);
         if (!h) return null;
         return {
           slug: h.slug,
@@ -457,12 +462,12 @@ export function useHostBySlug(slug: string | undefined) {
         };
       }
       const { data: host, error: hErr } = await supabase
-        .from("host_profiles")
-        .select("user_id, slug, bio, hero_url, city, verified")
+        .from("public_host_profiles")
+        .select("user_id, slug, display_name, bio, hero_url, city, verified")
         .eq("slug", slug!)
         .maybeSingle();
       if (hErr) throw hErr;
-      if (!host) return null;
+      if (!host?.user_id || !host.slug) return null;
 
       const { data: listings, error: lErr } = await supabase
         .from("listings_with_capacity")
@@ -476,7 +481,7 @@ export function useHostBySlug(slug: string | undefined) {
       return {
         slug: host.slug,
         userId: host.user_id,
-        name: prettifySlug(host.slug),
+        name: host.display_name || prettifySlug(host.slug),
         bio: host.bio,
         heroUrl: host.hero_url,
         city: host.city,

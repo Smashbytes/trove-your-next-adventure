@@ -1,14 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { AtSign, BadgeCheck, Check, Heart, LifeBuoy, Bell, ShieldCheck, Sparkles, ChevronRight, Zap, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
 import { useFollowedHosts, useToggleFollow } from "@/lib/social";
-import { CATEGORIES, CITIES } from "@/lib/spots";
-import { getGuestPrefs, patchGuestPrefs, type GuestPrefs } from "@/lib/guest-prefs";
+import { CATEGORIES, CITIES } from "@/lib/format";
+import { getGuestPrefs, saveGuestPrefs, type GuestPrefs } from "@/lib/guest-prefs";
 import { isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
+import { friendlyError } from "@/lib/errors";
+import { useTopLevelCategories } from "@/lib/listings-api";
 import {
   normalizeUsername,
   USERNAME_RE,
@@ -32,6 +34,7 @@ function SettingsPage() {
             Sign in to manage your interests, friends and preferences.
           </p>
           <button
+            type="button"
             onClick={openAuthModal}
             className="rounded-full bg-gradient-brand px-6 py-3 text-sm font-semibold text-primary-foreground shadow-glow"
           >
@@ -119,6 +122,7 @@ const SPARK_TOGGLES: {
 
 function SparkSettings() {
   const { profile } = useAuth();
+  const fieldId = useId();
   const update = useUpdateSparkSettings();
 
   const [username, setUsername] = useState("");
@@ -142,7 +146,7 @@ function SparkSettings() {
       await update.mutateAsync({ username: normalized });
       toast.success(`You're @${normalized} on TROVE.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't save username.");
+      toast.error(friendlyError(e, "Couldn't save your username. Try again."));
     }
   }
 
@@ -151,7 +155,7 @@ function SparkSettings() {
     const next = !profile[key];
     update.mutate(
       { [key]: next },
-      { onError: (e) => toast.error(e.message) },
+      { onError: (e) => toast.error(friendlyError(e, "Couldn't save that setting. Try again.")) },
     );
   }
 
@@ -159,20 +163,23 @@ function SparkSettings() {
     setCity(next);
     update.mutate(
       { city: next || null },
-      { onError: (e) => toast.error(e.message) },
+      { onError: (e) => toast.error(friendlyError(e, "Couldn't save your city. Try again.")) },
     );
   }
 
   return (
     <Card title="Spark — social" icon={Zap}>
       {/* Username */}
-      <p className="mb-2 text-xs text-muted-foreground">
+      <label htmlFor={`${fieldId}-username`} className="mb-2 block text-xs text-muted-foreground">
         Claim a username so friends can find you. Tickets still use your full details.
-      </p>
+      </label>
       <div className="flex items-stretch gap-2">
         <div className="flex flex-1 items-center gap-1.5 rounded-full bg-surface-elevated px-4 ring-1 ring-border focus-within:ring-primary">
           <AtSign className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
+            id={`${fieldId}-username`}
+            aria-invalid={(!!username && !validFormat) || (changed && validFormat && available === false) || undefined}
+            aria-describedby={`${fieldId}-username-msg`}
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase())}
             placeholder="yourname"
@@ -182,13 +189,14 @@ function SparkSettings() {
           />
           {changed && validFormat && available !== undefined && (
             available ? (
-              <Check className="h-4 w-4 shrink-0 text-success" />
+              <Check className="h-4 w-4 shrink-0 text-success" aria-label="Available" />
             ) : (
-              <X className="h-4 w-4 shrink-0 text-destructive" />
+              <X className="h-4 w-4 shrink-0 text-destructive" aria-label="Taken" />
             )
           )}
         </div>
         <button
+          type="button"
           onClick={saveUsername}
           disabled={!changed || !validFormat || available === false || update.isPending}
           className="rounded-full bg-gradient-brand px-5 text-sm font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-40"
@@ -196,25 +204,29 @@ function SparkSettings() {
           Save
         </button>
       </div>
-      {username && !validFormat && (
-        <p className="mt-1.5 text-[11px] text-destructive">
-          3–20 characters, starts with a letter — letters, numbers, _ or .
-        </p>
-      )}
-      {changed && validFormat && available === false && (
-        <p className="mt-1.5 text-[11px] text-destructive">That username is taken.</p>
-      )}
+      <div id={`${fieldId}-username-msg`} aria-live="polite">
+        {username && !validFormat && (
+          <p className="mt-1.5 text-xs text-destructive">
+            3–20 characters, starting with a letter. Letters, numbers, _ or . only.
+          </p>
+        )}
+        {changed && validFormat && available === false && (
+          <p className="mt-1.5 text-xs text-destructive">That username is taken.</p>
+        )}
+      </div>
 
       {/* City (powers Friends Close By) */}
       <div className="mt-4">
         <p className="text-sm font-medium">Your city</p>
         <p className="mb-2 text-xs text-muted-foreground">Used for Friends Close By.</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Your city">
           {CITIES.map((c) => {
             const on = city === c;
             return (
               <button
                 key={c}
+                type="button"
+                aria-pressed={on}
                 onClick={() => saveCity(on ? "" : c)}
                 className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                   on
@@ -232,28 +244,14 @@ function SparkSettings() {
       {/* Toggles */}
       <div className="mt-4 space-y-1 border-t border-border/50 pt-2">
         {SPARK_TOGGLES.map((o) => {
-          const on = !!profile?.[o.key];
           return (
-            <div key={o.key} className="flex items-center justify-between py-2.5">
-              <div>
-                <p className="text-sm font-medium">{o.label}</p>
-                <p className="text-xs text-muted-foreground">{o.hint}</p>
-              </div>
-              <button
-                role="switch"
-                aria-checked={on}
-                onClick={() => toggle(o.key)}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                  on ? "bg-gradient-brand" : "bg-surface-elevated ring-1 ring-border"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-                    on ? "left-[1.375rem]" : "left-0.5"
-                  }`}
-                />
-              </button>
-            </div>
+            <SwitchRow
+              key={o.key}
+              label={o.label}
+              hint={o.hint}
+              on={!!profile?.[o.key]}
+              onToggle={() => toggle(o.key)}
+            />
           );
         })}
       </div>
@@ -262,27 +260,43 @@ function SparkSettings() {
 }
 
 function Interests() {
+  const { user, profile, refreshProfile } = useAuth();
+  // The device copy is kept in sync with the account (hydrated on every profile
+  // load, written on every save), so it's always the freshest value to show.
   const [interests, setInterests] = useState<string[]>(() => getGuestPrefs().interests);
+  useEffect(() => {
+    setInterests(getGuestPrefs().interests);
+  }, [profile?.updated_at]);
+  const { names: dbCategories } = useTopLevelCategories();
+  const options = dbCategories.length ? dbCategories : (CATEGORIES as string[]);
 
   function toggle(c: string) {
     const next = interests.includes(c)
       ? interests.filter((x) => x !== c)
       : [...interests, c];
+    const prev = interests;
     setInterests(next);
-    patchGuestPrefs({ interests: next });
+    saveGuestPrefs(user?.id, { interests: next })
+      .then(() => refreshProfile())
+      .catch((e) => {
+        setInterests(prev);
+        toast.error(friendlyError(e, "Couldn't save your interests. Try again."));
+      });
   }
 
   return (
     <Card title="Interests" icon={Sparkles}>
       <p className="mb-3 text-xs text-muted-foreground">
-        Pick what you're into — we'll surface more of it.
+        Pick what you're into and we'll show you more of it.
       </p>
-      <div className="flex flex-wrap gap-2">
-        {CATEGORIES.map((c) => {
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Interests">
+        {options.map((c) => {
           const on = interests.includes(c);
           return (
             <button
               key={c}
+              type="button"
+              aria-pressed={on}
               onClick={() => toggle(c)}
               className={`rounded-full px-3.5 py-2 text-xs font-semibold transition ${
                 on
@@ -337,8 +351,10 @@ function MySpots() {
                 {h.city && <p className="truncate text-xs text-muted-foreground">{h.city}</p>}
               </Link>
               <button
+                type="button"
                 onClick={() => toggleFollow.mutate(h.userId)}
-                className="text-[11px] text-muted-foreground transition hover:text-destructive"
+                aria-label={`Unfollow ${h.name}`}
+                className="px-2 py-2 text-xs text-muted-foreground transition hover:text-destructive"
               >
                 Unfollow
               </button>
@@ -361,35 +377,19 @@ function PrivacyData() {
 
   return (
     <Card title="Privacy & data" icon={ShieldCheck}>
-      <div className="flex items-center justify-between py-2.5">
-        <div>
-          <p className="text-sm font-medium">Product analytics</p>
-          <p className="text-xs text-muted-foreground">
-            Anonymous usage stats (PostHog) that help us improve TROVE
-          </p>
-        </div>
-        <button
-          role="switch"
-          aria-checked={analytics}
-          onClick={toggle}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-            analytics ? "bg-gradient-brand" : "bg-surface-elevated ring-1 ring-border"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-              analytics ? "left-[1.375rem]" : "left-0.5"
-            }`}
-          />
-        </button>
-      </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
+      <SwitchRow
+        label="Product analytics"
+        hint="Anonymous usage stats (PostHog) that help us improve TROVE"
+        on={analytics}
+        onToggle={toggle}
+      />
+      <p className="mt-1 text-xs text-muted-foreground">
         How we handle your data:{" "}
         <a
           href="https://www.welovetrove.co.za/legal/privacy"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-primary underline underline-offset-2"
         >
           Privacy Policy
         </a>
@@ -405,40 +405,77 @@ const NOTIF_OPTIONS: { key: keyof GuestPrefs["notifs"]; label: string; hint: str
 ];
 
 function NotificationPrefs() {
+  const { user, profile, refreshProfile } = useAuth();
   const [notifs, setNotifs] = useState<GuestPrefs["notifs"]>(() => getGuestPrefs().notifs);
+  useEffect(() => {
+    setNotifs(getGuestPrefs().notifs);
+  }, [profile?.updated_at]);
 
   function toggle(key: keyof GuestPrefs["notifs"]) {
+    const prev = notifs;
     const next = { ...notifs, [key]: !notifs[key] };
     setNotifs(next);
-    patchGuestPrefs({ notifs: next });
+    saveGuestPrefs(user?.id, { notifs: next })
+      .then(() => refreshProfile())
+      .catch((e) => {
+        setNotifs(prev);
+        toast.error(friendlyError(e, "Couldn't save that setting. Try again."));
+      });
   }
 
   return (
     <Card title="Notifications" icon={Bell}>
       <div className="space-y-1">
         {NOTIF_OPTIONS.map((o) => (
-          <div key={o.key} className="flex items-center justify-between py-2.5">
-            <div>
-              <p className="text-sm font-medium">{o.label}</p>
-              <p className="text-xs text-muted-foreground">{o.hint}</p>
-            </div>
-            <button
-              role="switch"
-              aria-checked={notifs[o.key]}
-              onClick={() => toggle(o.key)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                notifs[o.key] ? "bg-gradient-brand" : "bg-surface-elevated ring-1 ring-border"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-                  notifs[o.key] ? "left-[1.375rem]" : "left-0.5"
-                }`}
-              />
-            </button>
-          </div>
+          <SwitchRow
+            key={o.key}
+            label={o.label}
+            hint={o.hint}
+            on={notifs[o.key]}
+            onToggle={() => toggle(o.key)}
+          />
         ))}
       </div>
     </Card>
+  );
+}
+
+/** A labelled on/off row. The switch is named by the row's title and hint. */
+function SwitchRow({
+  label,
+  hint,
+  on,
+  onToggle,
+}: {
+  label: string;
+  hint: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p id={`${id}-label`} className="text-sm font-medium">{label}</p>
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-hint`}
+        onClick={onToggle}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+          on ? "bg-gradient-brand" : "bg-surface-elevated ring-1 ring-border"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
+            on ? "left-[1.375rem]" : "left-0.5"
+          }`}
+        />
+      </button>
+    </div>
   );
 }

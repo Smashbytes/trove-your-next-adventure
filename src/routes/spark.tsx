@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import {
   AtSign, Check, ChevronRight, Globe2, Lock, MapPin, Plus, Search,
   UserPlus, Users2, X, Zap,
@@ -8,7 +9,7 @@ import {
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
-import { formatPrice } from "@/lib/spots";
+import { formatPrice } from "@/lib/format";
 import { koboToRand } from "@/lib/listings-api";
 import {
   splitNeedsAction,
@@ -171,6 +172,7 @@ function FriendsTab() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find people — @username or name"
+          aria-label="Find people by username or name"
           className="w-full bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground/50"
         />
       </div>
@@ -202,7 +204,7 @@ function GuestRow({ guest }: { guest: GuestResult }) {
       await linkUp.mutateAsync(guest.id);
       toast.success(`Link Up request sent to ${display}.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't send request.");
+      toast.error(friendlyError(e, "Couldn't send request."));
     }
   }
 
@@ -211,7 +213,7 @@ function GuestRow({ guest }: { guest: GuestResult }) {
       <SparkAvatar name={display} url={guest.avatarUrl} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{display}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
+        <p className="truncate text-2xs text-muted-foreground">
           {guest.username ? `@${guest.username}` : ""}
           {guest.username && guest.city ? " · " : ""}
           {guest.city ?? ""}
@@ -221,18 +223,18 @@ function GuestRow({ guest }: { guest: GuestResult }) {
         </p>
       </div>
       {guest.linkStatus === "accepted" ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-3 py-1.5 text-[11px] font-semibold text-success">
+        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-3 py-1.5 text-2xs font-semibold text-success">
           <Check className="h-3 w-3" /> Linked
         </span>
       ) : guest.linkStatus === "pending" ? (
-        <span className="rounded-full bg-surface px-3 py-1.5 text-[11px] text-muted-foreground ring-1 ring-border">
+        <span className="rounded-full bg-surface px-3 py-1.5 text-2xs text-muted-foreground ring-1 ring-border">
           {guest.requestedByMe ? "Requested" : "Respond in Friends"}
         </span>
       ) : (
         <button
           onClick={send}
           disabled={linkUp.isPending}
-          className="rounded-full bg-gradient-brand px-3.5 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-50"
+          className="rounded-full bg-gradient-brand px-3.5 py-1.5 text-2xs font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-50"
         >
           Link Up
         </button>
@@ -258,7 +260,7 @@ function CloseByTab() {
         </p>
         <button
           onClick={() => setEverywhere((v) => !v)}
-          className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+          className={`rounded-full px-3 py-1.5 text-2xs font-semibold transition ${
             everywhere
               ? "bg-gradient-brand text-primary-foreground shadow-glow-soft"
               : "bg-surface-elevated text-muted-foreground ring-1 ring-border"
@@ -334,7 +336,7 @@ function GroupsTab() {
           <SectionLabel>Your groups</SectionLabel>
           <button
             onClick={() => setCreating((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-full bg-gradient-brand px-3.5 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow-soft"
+            className="inline-flex items-center gap-1 rounded-full bg-gradient-brand px-3.5 py-1.5 text-2xs font-semibold text-primary-foreground shadow-glow-soft"
           >
             <Plus className="h-3 w-3" /> New group
           </button>
@@ -366,6 +368,7 @@ function GroupsTab() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search public groups"
+            aria-label="Search public groups"
             className="w-full bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground/50"
           />
         </div>
@@ -380,7 +383,7 @@ function GroupsTab() {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{children}</p>;
+  return <p className="text-2xs uppercase tracking-wider text-muted-foreground">{children}</p>;
 }
 
 function CreateGroupForm({ onDone }: { onDone: () => void }) {
@@ -400,7 +403,7 @@ function CreateGroupForm({ onDone }: { onDone: () => void }) {
       toast.success(`Group “${name.trim()}” created.`);
       onDone();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't create group.");
+      toast.error(friendlyError(e, "Couldn't create group."));
     }
   }
 
@@ -410,12 +413,14 @@ function CreateGroupForm({ onDone }: { onDone: () => void }) {
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Group name — e.g. Braai Squad"
+        aria-label="Group name"
         className="w-full rounded-full bg-surface-elevated px-4 py-2.5 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
       />
       <input
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="What's the vibe? (optional)"
+        aria-label="Group description (optional)"
         className="w-full rounded-full bg-surface-elevated px-4 py-2.5 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
       />
       <div className="flex items-center justify-between">
@@ -546,10 +551,10 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
                 {m.userId === user?.id ? " (you)" : ""}
               </p>
               {m.role === "owner" && (
-                <span className="text-[10px] uppercase tracking-wide text-accent">Owner</span>
+                <span className="text-2xs uppercase tracking-wide text-accent">Owner</span>
               )}
               {m.status === "invited" && (
-                <span className="text-[10px] text-muted-foreground">Invited</span>
+                <span className="text-2xs text-muted-foreground">Invited</span>
               )}
             </div>
           );
@@ -579,10 +584,10 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
                           await invite.mutateAsync({ groupId: group.id, userId: f.friendId });
                           toast.success(`Invited ${f.name}.`);
                         } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Couldn't invite.");
+                          toast.error(friendlyError(e, "Couldn't invite."));
                         }
                       }}
-                      className="rounded-full bg-gradient-brand px-3 py-1 text-[10px] font-semibold text-primary-foreground"
+                      className="rounded-full bg-gradient-brand px-3 py-1 text-2xs font-semibold text-primary-foreground"
                     >
                       Invite
                     </button>
@@ -599,7 +604,7 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
                 onClick={() =>
                   update.mutate(
                     { groupId: group.id, patch: { listed: !(group.listed ?? true) } },
-                    { onError: (e) => toast.error(e.message) },
+                    { onError: (e) => toast.error(friendlyError(e, "Something went wrong. Try again.")) },
                   )
                 }
               />
@@ -612,7 +617,7 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
         {!isOwner && (
           <button
             onClick={() => leave.mutate({ groupId: group.id })}
-            className="text-[11px] text-muted-foreground transition hover:text-destructive"
+            className="text-2xs text-muted-foreground transition hover:text-destructive"
           >
             Leave group
           </button>
@@ -623,11 +628,11 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
               if (confirm(`Delete “${group.name}”? This can't be undone.`)) {
                 del.mutate(group.id, {
                   onSuccess: () => toast.success("Group deleted."),
-                  onError: (e) => toast.error(e.message),
+                  onError: (e) => toast.error(friendlyError(e, "Something went wrong. Try again.")),
                 });
               }
             }}
-            className="text-[11px] text-muted-foreground transition hover:text-destructive"
+            className="text-2xs text-muted-foreground transition hover:text-destructive"
           >
             Delete group
           </button>
@@ -644,13 +649,13 @@ function DirectoryGroupRow({ group }: { group: GroupSummary }) {
       <GroupIcon isPrivate={group.isPrivate} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{group.name}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
+        <p className="truncate text-2xs text-muted-foreground">
           {group.memberCount} member{group.memberCount === 1 ? "" : "s"}
           {group.ownerName ? ` · by ${group.ownerName}` : ""}
         </p>
       </div>
       {group.isPrivate ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1.5 text-[11px] text-muted-foreground ring-1 ring-border">
+        <span className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-1.5 text-2xs text-muted-foreground ring-1 ring-border">
           <Lock className="h-3 w-3" /> Invite only
         </span>
       ) : (
@@ -658,11 +663,11 @@ function DirectoryGroupRow({ group }: { group: GroupSummary }) {
           onClick={() =>
             join.mutate(group.id, {
               onSuccess: () => toast.success(`Joined ${group.name}!`),
-              onError: (e) => toast.error(e.message),
+              onError: (e) => toast.error(friendlyError(e, "Something went wrong. Try again.")),
             })
           }
           disabled={join.isPending}
-          className="rounded-full bg-gradient-brand px-3.5 py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-50"
+          className="rounded-full bg-gradient-brand px-3.5 py-1.5 text-2xs font-semibold text-primary-foreground shadow-glow-soft disabled:opacity-50"
         >
           Join
         </button>
@@ -684,7 +689,7 @@ function GroupIcon({ isPrivate }: { isPrivate: boolean }) {
 // ---------------------------------------------------------------------------
 
 function SparkAvatar({ name, url, size = "md" }: { name: string; url?: string | null; size?: "sm" | "md" }) {
-  const cls = size === "sm" ? "h-7 w-7 text-[10px]" : "h-9 w-9 text-sm";
+  const cls = size === "sm" ? "h-7 w-7 text-2xs" : "h-9 w-9 text-sm";
   return (
     <div className={`grid ${cls} shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-brand font-display text-primary-foreground`}>
       {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : name.replace(/^@/, "").charAt(0).toUpperCase()}

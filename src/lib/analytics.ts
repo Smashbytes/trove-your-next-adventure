@@ -4,7 +4,10 @@
 // We therefore never call posthog.identify() — events stay anonymous — and the
 // opt-out persists in guest prefs. Events are tagged app:"guest" so the shared
 // PostHog project segments cleanly across the website, guest app and engine.
-import posthog from "posthog-js";
+//
+// The SDK is dynamic-imported so it never sits in the entry bundle; events
+// raised before it arrives are queued and flushed once it has loaded.
+import type { PostHog } from "posthog-js";
 import type { AnyRouter } from "@tanstack/react-router";
 import { getGuestPrefs, patchGuestPrefs } from "@/lib/guest-prefs";
 
@@ -13,30 +16,33 @@ const HOST =
   (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ||
   "https://eu.i.posthog.com";
 
-let initCalled = false;
+let ph: PostHog | null = null;
+let loading: Promise<PostHog | null> | null = null;
+const queue: string[] = [];
 
-function loaded(): boolean {
-  return (posthog as unknown as { __loaded?: boolean }).__loaded === true;
-}
-
-function init() {
-  if (!KEY || typeof window === "undefined" || initCalled) return;
-  initCalled = true;
-  posthog.init(KEY, {
-    api_host: HOST,
-    capture_pageview: false, // captured on router resolution instead
-    capture_pageleave: true,
-    person_profiles: "identified_only", // never identified → stays anonymous
-    autocapture: false, // pageviews + explicit events only
-    loaded: (ph) => {
-      // Clear a persisted SDK opt-out left over from an earlier session if
-      // the user has since re-enabled analytics in Settings.
-      if (isAnalyticsEnabled() && ph.has_opted_out_capturing()) {
-        ph.opt_in_capturing();
-      }
-    },
-  });
-  posthog.register({ app: "guest" });
+function init(): Promise<PostHog | null> {
+  if (!KEY || typeof window === "undefined") return Promise.resolve(null);
+  if (loading) return loading;
+  loading = import("posthog-js")
+    .then(({ default: posthog }) => {
+      posthog.init(KEY, {
+        api_host: HOST,
+        capture_pageview: false, // captured on router resolution instead
+        capture_pageleave: true,
+        person_profiles: "identified_only", // never identified → stays anonymous
+        autocapture: false, // pageviews + explicit events only
+      });
+      posthog.register({ app: "guest" });
+      // Honour the current preference, even if it changed while loading, and
+      // clear a persisted SDK opt-out left over from an earlier session.
+      if (!isAnalyticsEnabled()) posthog.opt_out_capturing();
+      else if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
+      ph = posthog;
+      for (const url of queue.splice(0)) send(url);
+      return posthog;
+    })
+    .catch(() => null);
+  return loading;
 }
 
 export function isAnalyticsEnabled(): boolean {
@@ -46,32 +52,35 @@ export function isAnalyticsEnabled(): boolean {
 export function setAnalyticsEnabled(enabled: boolean) {
   patchGuestPrefs({ analytics: enabled });
   if (enabled) {
-    if (loaded()) {
-      if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
+    if (ph) {
+      if (ph.has_opted_out_capturing()) ph.opt_in_capturing();
     } else {
-      init();
+      void init();
     }
-  } else if (loaded() && !posthog.has_opted_out_capturing()) {
-    posthog.opt_out_capturing();
+  } else if (ph && !ph.has_opted_out_capturing()) {
+    ph.opt_out_capturing();
   }
 }
 
 let lastUrl: string | null = null;
 
+function send(url: string) {
+  ph?.capture("$pageview", { $current_url: url });
+}
+
 function capturePageview() {
-  // capture() queues safely while the SDK is still async-loading, and no-ops
-  // when the user has opted out — only skip if init was never called at all.
-  if (!initCalled || !isAnalyticsEnabled()) return;
+  if (!loading || !isAnalyticsEnabled()) return;
   const url = window.location.href;
   if (url === lastUrl) return; // dedupe: initial load may also emit onResolved
   lastUrl = url;
-  posthog.capture("$pageview", { $current_url: url });
+  if (ph) send(url);
+  else queue.push(url);
 }
 
 /** Call once from getRouter(); captures a $pageview per navigation. */
 export function initAnalytics(router: AnyRouter) {
   if (!KEY || typeof window === "undefined") return;
-  if (isAnalyticsEnabled()) init();
+  if (isAnalyticsEnabled()) void init();
   // onResolved only fires for in-app navigations, so capture the initial
   // page load explicitly.
   capturePageview();

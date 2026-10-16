@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check, Navigation } from "lucide-react";
 import { toast } from "sonner";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
+import { NotFoundState } from "@/components/NotFoundState";
+import { friendlyError } from "@/lib/errors";
 import { FriendStack } from "@/components/FriendStack";
 import { SpotDetailDesktop } from "@/components/desktop/SpotDetailDesktop";
 import { openDirections } from "@/lib/maps";
-import { formatDate, formatPrice, formatTime, getSpot, hostSlug } from "@/lib/spots";
+import { formatDate, formatPrice, formatTime, hostSlug } from "@/lib/format";
 import { useIsDemo, useListing } from "@/lib/listings-api";
 import { useAuth } from "@/lib/auth";
 import { useFriends, useFriendsGoing } from "@/lib/friends-api";
@@ -20,13 +22,12 @@ export const Route = createFileRoute("/spot/$id")({
   // Runs in the SSR worker on first load — that's what link-preview crawlers
   // (WhatsApp, Facebook, X) see, since they don't execute JS.
   loader: async ({ params }) => ({ og: await fetchSpotOg(params.id) }),
-  head: ({ params, loaderData }) => {
+  head: ({ loaderData }) => {
     if (loaderData?.og) return { meta: spotOgMeta(loaderData.og) };
-    const s = getSpot(params.id);
-    return { meta: [{ title: s ? `${s.name} — TROVE` : "Spot — TROVE" }, { name: "description", content: s?.tagline ?? "" }] };
+    return { meta: [{ title: "Spot — TROVE" }] };
   },
   component: SpotPage,
-  notFoundComponent: () => <div className="p-10 text-center">Spot not found.</div>,
+  notFoundComponent: () => <NotFoundState />,
 });
 
 function SpotPage() {
@@ -70,7 +71,8 @@ function SpotPage() {
 
   const total = spot ? spot.price * qty : 0;
   const splitCount = pickedFriends.length + 1; // include me
-  const perPerson = useMemo(() => Math.ceil(total / splitCount), [total, splitCount]);
+  // Round each share up to the cent so the shares always cover the total.
+  const perPerson = useMemo(() => Math.ceil((total * 100) / splitCount) / 100, [total, splitCount]);
 
   // Demo keeps the mock split-at-checkout; live users send a real split request.
   const canSplit = demo
@@ -91,7 +93,7 @@ function SpotPage() {
       toast.success("Split request sent — we'll ping you when everyone responds.");
       navigate({ to: "/split/$id", params: { id: split_id } });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't send the split request.");
+      toast.error(friendlyError(e, "Couldn't send the split request."));
     } finally {
       setSendingSplit(false);
     }
@@ -118,7 +120,7 @@ function SpotPage() {
       </div>
     );
   }
-  if (!spot) return <div className="p-10 text-center">Spot not found.</div>;
+  if (!spot) return <NotFoundState />;
 
   function book() {
     if (!spot) return;
@@ -189,14 +191,19 @@ function SpotPage() {
 
         {/* top bar */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4 pt-[max(env(safe-area-inset-top),1rem)]">
-          <Link to="/" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+          <Link to="/" aria-label="Back to Discover" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex gap-2">
             <button onClick={share} aria-label="Share" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
               <Share2 className="h-4 w-4" />
             </button>
-            <button onClick={() => toggleSave.mutate(spot.id)} className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+            <button
+              onClick={() => (isAuthenticated ? toggleSave.mutate(spot.id) : openAuthModal())}
+              aria-label={saved ? "Remove from saved" : "Save"}
+              aria-pressed={saved}
+              className="grid h-10 w-10 place-items-center rounded-full glass-strong"
+            >
               <Heart className={`h-4 w-4 ${saved ? "fill-primary text-primary" : ""}`} />
             </button>
           </div>
@@ -205,7 +212,7 @@ function SpotPage() {
         {/* Header info overlay */}
         <div className="absolute inset-x-0 bottom-0 p-5 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-primary/20 px-2.5 py-1 text-[11px] uppercase tracking-wider text-primary">{spot.category}</span>
+            <span className="rounded-full bg-primary/20 px-2.5 py-1 text-2xs uppercase tracking-wider text-primary">{spot.category}</span>
             <CapacityPill spot={spot} />
           </div>
           <h1 className="font-display text-3xl leading-tight">{spot.name}</h1>
@@ -219,17 +226,21 @@ function SpotPage() {
           <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
             <div className="flex items-center gap-1.5">
               <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-              <span className="font-display text-lg">{spot.rating}</span>
+              <span className="font-display text-lg">{spot.reviews > 0 ? spot.rating : "New"}</span>
             </div>
-            <span className="text-[10px] text-muted-foreground">{spot.reviews} reviews</span>
+            <span className="text-xs text-muted-foreground">
+              {spot.reviews > 0 ? `${spot.reviews} review${spot.reviews === 1 ? "" : "s"}` : "No reviews yet"}
+            </span>
           </div>
           <div className="w-px bg-border/60 my-3" />
           <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
             <div className="flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-primary" />
-              <span className="font-display text-lg">{spot.distanceKm}km</span>
+              <span className="font-display text-lg truncate max-w-[6.5rem]">
+                {spot.distanceKm > 0 ? `${spot.distanceKm}km` : spot.city || "—"}
+              </span>
             </div>
-            <span className="text-[10px] text-muted-foreground">{spot.area}</span>
+            <span className="text-xs text-muted-foreground truncate max-w-full">{spot.area}</span>
           </div>
           <div className="w-px bg-border/60 my-3" />
           <div className="flex-1 flex flex-col items-center justify-center gap-0.5 py-4 px-3">
@@ -237,7 +248,7 @@ function SpotPage() {
               <Clock className="h-3.5 w-3.5 text-accent" />
               <span className="font-display text-base">{formatTime(spot.date)}</span>
             </div>
-            <span className="text-[10px] text-muted-foreground">{formatDate(spot.date)}</span>
+            <span className="text-xs text-muted-foreground">{formatDate(spot.date)}</span>
           </div>
         </div>
 
@@ -252,7 +263,7 @@ function SpotPage() {
           <p className="text-sm font-medium text-muted-foreground leading-relaxed">{spot.description}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {spot.vibes.map((v) => (
-              <span key={v} className="rounded-full bg-surface-elevated px-2.5 py-1 text-[11px] text-muted-foreground">#{v}</span>
+              <span key={v} className="rounded-full bg-surface-elevated px-2.5 py-1 text-2xs text-muted-foreground">#{v}</span>
             ))}
           </div>
         </section>
@@ -262,7 +273,7 @@ function SpotPage() {
           <section className="rounded-2xl bg-gradient-soft p-4 ring-1 ring-primary/30">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-primary">Spark</p>
+                <p className="text-2xs uppercase tracking-wider text-primary">Spark</p>
                 <h3 className="font-display text-lg mt-0.5">Your crew is going</h3>
               </div>
               <button onClick={share} className="inline-flex items-center gap-1.5 rounded-full bg-foreground/10 px-3 py-1.5 text-xs font-medium">
@@ -276,15 +287,15 @@ function SpotPage() {
         {/* Hours / Host */}
         <section className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-xl bg-surface ring-1 ring-border p-3">
-            <p className="text-[10px] uppercase text-muted-foreground">Hours</p>
+            <p className="text-2xs uppercase text-muted-foreground">Hours</p>
             <p className="mt-1">{spot.hours}</p>
           </div>
           <Link
             to="/host/$slug"
-            params={{ slug: hostSlug(spot.hostName) }}
+            params={{ slug: spot.hostSlug || hostSlug(spot.hostName) }}
             className="rounded-xl bg-surface ring-1 ring-border p-3 transition active:scale-[0.98] hover:ring-primary/40"
           >
-            <p className="text-[10px] uppercase text-muted-foreground">Hosted by</p>
+            <p className="text-2xs uppercase text-muted-foreground">Hosted by</p>
             <p className="mt-1 inline-flex items-center gap-1 text-primary">
               {spot.hostName} <span className="text-xs">›</span>
             </p>
@@ -307,7 +318,7 @@ function SpotPage() {
               <p className="truncate text-sm font-semibold">{spot.area || spot.city}</p>
               <p className="truncate text-xs text-muted-foreground">{spot.address || "Tap for directions"}</p>
             </div>
-            <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-brand px-3.5 py-2 text-[11px] font-bold text-primary-foreground shadow-glow-soft">
+            <span className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-brand px-3.5 py-2 text-2xs font-bold text-primary-foreground shadow-glow-soft">
               <Navigation className="h-3.5 w-3.5" /> Directions
             </span>
           </button>
@@ -323,7 +334,7 @@ function SpotPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold text-sm">Split the bill</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
+                  <p className="text-2xs text-muted-foreground truncate">
                     {pickedFriends.length > 0
                       ? `Splitting with ${pickedFriends.length} · ${formatPrice(perPerson)} each`
                       : demo
@@ -362,16 +373,16 @@ function SpotPage() {
                   <h3 className="font-display text-xl">Split the bill</h3>
                   <p className="text-xs text-muted-foreground">Pick who's chipping in</p>
                 </div>
-                <button onClick={() => setSplitOpen(false)} className="grid h-9 w-9 place-items-center rounded-full bg-surface-elevated">
+                <button onClick={() => setSplitOpen(false)} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full bg-surface-elevated">
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
               {/* Per-person preview */}
               <div className="rounded-2xl bg-gradient-soft p-4 ring-1 ring-primary/30 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-primary">Per person</p>
+                <p className="text-2xs uppercase tracking-wider text-primary">Per person</p>
                 <p className="mt-1 font-display text-3xl text-gradient">{formatPrice(perPerson)}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-2xs text-muted-foreground mt-1">
                   {formatPrice(total)} ÷ {splitCount} {splitCount === 1 ? "person" : "people"}
                 </p>
               </div>
@@ -381,7 +392,7 @@ function SpotPage() {
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
                   <button
                     onClick={() => setGroupFilter(null)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-2xs font-semibold transition ${
                       groupFilter === null
                         ? "bg-gradient-brand text-primary-foreground"
                         : "bg-surface-elevated text-muted-foreground ring-1 ring-border"
@@ -393,7 +404,7 @@ function SpotPage() {
                     <button
                       key={g.id}
                       onClick={() => setGroupFilter(groupFilter === g.id ? null : g.id)}
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-2xs font-semibold transition ${
                         groupFilter === g.id
                           ? "bg-gradient-brand text-primary-foreground"
                           : "bg-surface-elevated text-muted-foreground ring-1 ring-border"
@@ -426,7 +437,7 @@ function SpotPage() {
                           </div>
                           <div className="flex-1 text-left">
                             <p className="text-sm font-semibold">{f.name}</p>
-                            <p className="text-[11px] text-muted-foreground">Friend</p>
+                            <p className="text-2xs text-muted-foreground">Friend</p>
                           </div>
                           <div
                             className={`grid h-6 w-6 place-items-center rounded-full transition ${
@@ -455,7 +466,7 @@ function SpotPage() {
                           </div>
                           <div className="flex-1 text-left">
                             <p className="text-sm font-semibold">{f.name}</p>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-2xs text-muted-foreground">
                               {f.username ? `@${f.username}` : "Linked friend"}
                             </p>
                           </div>
@@ -494,7 +505,7 @@ function SpotPage() {
                   >
                     {sendingSplit ? "Sending…" : `Send split request${pickedFriends.length > 0 ? ` · ${formatPrice(perPerson)} each` : ""}`}
                   </button>
-                  <p className="text-center text-[10px] text-muted-foreground">
+                  <p className="text-center text-2xs text-muted-foreground">
                     Friends accept in-app, then everyone pays their share (+R5 split fee). Tickets are issued once all shares are paid.
                   </p>
                 </>
@@ -512,12 +523,12 @@ function SpotPage() {
         >
           <div className="glass-strong rounded-2xl p-3 shadow-glow flex items-center gap-3">
             <div className="flex items-center rounded-full bg-surface ring-1 ring-border">
-              <button onClick={() => setQty(Math.max(1, qty - 1))} className="h-9 w-9 text-lg">−</button>
-              <span className="w-6 text-center text-sm font-semibold">{qty}</span>
-              <button onClick={() => setQty(Math.min(10, qty + 1))} className="h-9 w-9 text-lg">+</button>
+              <button onClick={() => setQty(Math.max(1, qty - 1))} disabled={qty <= 1} aria-label="Fewer tickets" className="h-10 w-10 text-lg disabled:opacity-40">−</button>
+              <span className="w-6 text-center text-sm font-semibold" aria-live="polite" aria-label={`${qty} ticket${qty === 1 ? "" : "s"}`}>{qty}</span>
+              <button onClick={() => setQty(Math.min(10, qty + 1))} disabled={qty >= 10} aria-label="More tickets" className="h-10 w-10 text-lg disabled:opacity-40">+</button>
             </div>
             <div className="flex-1">
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {demo && pickedFriends.length > 0 ? `Your share` : "Total"}
               </div>
               <div className="font-display text-lg text-gradient">

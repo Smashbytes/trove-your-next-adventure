@@ -4,6 +4,26 @@
 //     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
 //     error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
+import { execSync } from "node:child_process";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-export default defineConfig();
+// Build stamp: the commit this bundle was built from (plus "-dirty" for
+// uncommitted changes). Rendered as <meta name="trove-build"> so anyone can
+// check which version is live.
+function buildStamp(): string {
+  try {
+    const sha = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    const dirty = execSync("git status --porcelain --untracked-files=no", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return dirty ? `${sha}-dirty` : sha;
+  } catch {
+    return "unknown";
+  }
+}
+
+export default defineConfig({
+  vite: {
+    define: {
+      __TROVE_BUILD__: JSON.stringify(`${buildStamp()} ${new Date().toISOString()}`),
+    },
+  },
+});

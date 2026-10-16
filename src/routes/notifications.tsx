@@ -174,7 +174,7 @@ function NotificationRow({ n }: { n: AppNotification }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{spec.title}</p>
         {body && <p className="mt-0.5 text-xs text-muted-foreground">{body}</p>}
-        <p className="mt-1 text-[11px] text-muted-foreground/70">{when}</p>
+        <p className="mt-1 text-2xs text-muted-foreground/70">{when}</p>
       </div>
       {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
     </Wrapper>

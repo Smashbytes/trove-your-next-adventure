@@ -21,6 +21,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import { useAuth } from "@/lib/auth";
 import { SplitPrompt } from "@/components/SplitPrompt";
 import { useRespondFriend } from "@/lib/friends-api";
@@ -145,7 +146,7 @@ function NotificationCard({ n, onClose }: { n: AppNotification; onClose: () => v
               ? `You're linked up with ${targets.fromName ?? "your friend"}.`
               : "Request declined.",
           ),
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't respond."),
+        onError: (e) => toast.error(friendlyError(e, "Couldn't respond.")),
       },
     );
     onClose();

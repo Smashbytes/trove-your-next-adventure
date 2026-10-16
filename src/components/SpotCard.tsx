@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { MapPin, Star, Clock, ArrowUpRight, Ticket } from "lucide-react";
 import { CapacityPill } from "./CapacityBar";
-import { formatDate, formatTime, formatPrice, hostSlug, type Spot } from "@/lib/spots";
+import { formatDate, formatTime, formatPrice, hostSlug } from "@/lib/format";
+import type { Spot } from "@/lib/spots";
 
 export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
   return (
@@ -33,7 +34,7 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
 
           {/* Top: category + capacity */}
           <div className="absolute inset-x-3 top-3 flex items-center justify-between">
-            <span className="rounded-full glass-strong px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+            <span className="rounded-full glass-strong px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.18em] text-primary">
               {spot.category}
             </span>
             <CapacityPill spot={spot} />
@@ -44,17 +45,17 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
             {/* Date / time strip */}
             <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-2.5 py-1 ring-1 ring-white/15">
               <Clock className="h-3 w-3 text-accent" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-white/95">
+              <span className="text-2xs font-semibold uppercase tracking-wider text-white/95">
                 {formatDate(spot.date)} · {formatTime(spot.date)}
               </span>
             </div>
             <h3 className="font-display text-[1.45rem] leading-[1.0] tracking-tight text-white drop-shadow-sm">
               {spot.name}
             </h3>
-            <p className="mt-1.5 text-[12px] font-medium text-white/80 line-clamp-1">{spot.tagline}</p>
+            <p className="mt-1.5 text-xs font-medium text-white/80 line-clamp-1">{spot.tagline}</p>
 
             {/* Meta row */}
-            <div className="mt-2.5 flex items-center gap-3 text-[11px] font-medium text-white/80">
+            <div className="mt-2.5 flex items-center gap-3 text-2xs font-medium text-white/80">
               <span className="inline-flex items-center gap-1">
                 <MapPin className="h-3 w-3" /> {spot.area}
               </span>
@@ -73,19 +74,19 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
       <footer className="flex items-center justify-between gap-3 px-3.5 py-3 border-t border-white/[0.05]">
         <Link
           to="/host/$slug"
-          params={{ slug: hostSlug(spot.hostName) }}
+          params={{ slug: spot.hostSlug || hostSlug(spot.hostName) }}
           className="flex items-center gap-2.5 min-w-0 group/host"
         >
           <div className="rounded-full p-[1.5px] bg-gradient-brand shrink-0">
-            <div className="h-8 w-8 rounded-full bg-background grid place-items-center font-display text-[11px] font-bold">
+            <div className="h-8 w-8 rounded-full bg-background grid place-items-center font-display text-2xs font-bold">
               {spot.hostName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </div>
           </div>
           <div className="leading-tight min-w-0">
-            <p className="text-[12px] font-semibold truncate group-hover/host:text-primary transition">
+            <p className="text-xs font-semibold truncate group-hover/host:text-primary transition">
               {spot.hostName}
             </p>
-            <p className="text-[10px] font-medium text-muted-foreground truncate">
+            <p className="text-2xs font-medium text-muted-foreground truncate">
               {spot.friendsGoing.length > 0
                 ? `${spot.friendsGoing.length} from your community going`
                 : `${spot.reviews} reviews`}

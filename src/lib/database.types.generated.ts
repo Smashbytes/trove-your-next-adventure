@@ -1244,6 +1244,10 @@ export type Database = {
           avatar_url: string | null
           city: string | null
           created_at: string
+          date_of_birth: string | null
+          gender: string | null
+          interests: string[]
+          notification_prefs: Json
           discoverable: boolean
           friends_going_optin: boolean
           full_name: string | null
@@ -1260,6 +1264,10 @@ export type Database = {
           avatar_url?: string | null
           city?: string | null
           created_at?: string
+          date_of_birth?: string | null
+          gender?: string | null
+          interests?: string[]
+          notification_prefs?: Json
           discoverable?: boolean
           friends_going_optin?: boolean
           full_name?: string | null
@@ -1276,6 +1284,10 @@ export type Database = {
           avatar_url?: string | null
           city?: string | null
           created_at?: string
+          date_of_birth?: string | null
+          gender?: string | null
+          interests?: string[]
+          notification_prefs?: Json
           discoverable?: boolean
           friends_going_optin?: boolean
           full_name?: string | null

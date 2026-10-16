@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Search as SearchIcon, SlidersHorizontal, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { SpotCard } from "@/components/SpotCard";
-import { CITIES, type Vibe } from "@/lib/spots";
+import { CITIES } from "@/lib/format";
+import type { Vibe } from "@/lib/spots";
 import { useListings, useTopLevelCategories } from "@/lib/listings-api";
 
 export const Route = createFileRoute("/search")({
@@ -17,6 +18,7 @@ const SORTS = ["Trending", "Closest", "Cheapest", "Top Rated"] as const;
 function SearchPage() {
   const [q, setQ] = useState("");
   const [maxPrice, setMaxPrice] = useState(7000);
+  const priceId = useId();
   const [vibe, setVibe] = useState<Vibe | null>(null);
   const [cat, setCat] = useState<string | null>(null);
   const [city, setCity] = useState<string | null>(null);
@@ -57,6 +59,7 @@ function SearchPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search spots, vibes, areas, tags…"
+            aria-label="Search spots"
             className="w-full rounded-full bg-surface ring-1 ring-border py-3 pl-10 pr-12 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-primary"
           />
           <button
@@ -66,7 +69,7 @@ function SearchPage() {
           >
             <SlidersHorizontal className="h-4 w-4 text-primary-foreground" />
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-foreground text-[9px] font-bold text-background ring-2 ring-background">
+              <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-foreground text-2xs font-bold text-background ring-2 ring-background">
                 {activeFilterCount}
               </span>
             )}
@@ -164,10 +167,11 @@ function SearchPage() {
             </div>
 
             <div>
-              <label className="text-xs uppercase tracking-wider text-muted-foreground">Max price</label>
+              <label htmlFor={priceId} className="text-xs uppercase tracking-wider text-muted-foreground">Max price</label>
               <div className="mt-2 flex items-center gap-3">
                 <input
-                  type="range" min={0} max={7000} step={50} value={maxPrice}
+                  id={priceId} type="range" min={0} max={7000} step={50} value={maxPrice}
+                  aria-valuetext={maxPrice === 0 ? "Free only" : `Up to R${maxPrice}`}
                   onChange={(e) => setMaxPrice(Number(e.target.value))}
                   className="flex-1 accent-primary"
                 />
