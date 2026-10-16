@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ticket, ChevronRight } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useMyBookings, type BookingView } from "@/lib/bookings-api";
-import { formatDate, formatTime, formatPrice } from "@/lib/spots";
+import { formatDate, formatTime, formatPrice } from "@/lib/format";
 
 export const Route = createFileRoute("/tickets")({
   head: () => ({ meta: [{ title: "My Tickets — TROVE" }] }),
@@ -88,9 +88,9 @@ function BookingRow({ booking, dim }: { booking: BookingView; dim?: boolean }) {
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <p className="text-[10px] uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
-          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">Cancelled</span>}
-          {refundPending && <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-warning">Refund pending</span>}
+          <p className="text-2xs uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
+          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-2xs font-semibold uppercase text-destructive">Cancelled</span>}
+          {refundPending && <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-2xs font-semibold uppercase text-warning">Refund pending</span>}
         </div>
         <p className="font-display text-base truncate">{spot.name}</p>
         <p className="text-xs text-muted-foreground">{booking.qty} × · {formatPrice(booking.total)}</p>

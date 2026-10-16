@@ -1,15 +1,19 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Sparkles, Navigation } from "lucide-react";
-import { formatDate, formatTime, formatPrice } from "@/lib/spots";
+import { formatDate, formatTime, formatPrice } from "@/lib/format";
 import { useHostBySlug } from "@/lib/listings-api";
 import { useFollowedIds, useToggleFollow } from "@/lib/social";
 import { openDirections } from "@/lib/maps";
+import { shareLink } from "@/lib/share";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
+import { NotFoundState } from "@/components/NotFoundState";
 
 export const Route = createFileRoute("/host/$slug")({
   head: () => ({ meta: [{ title: "Spot — TROVE" }] }),
   component: HostPage,
-  notFoundComponent: () => <div className="p-10 text-center">Spot not found.</div>,
+  notFoundComponent: () => <NotFoundState title="This Spot isn't on TROVE" body="Check the link, or find something else to do on Discover." />,
 });
 
 function HostPage() {
@@ -18,21 +22,30 @@ function HostPage() {
   const { data: followedIds = [] } = useFollowedIds();
   const toggleFollow = useToggleFollow();
   const following = !!host && followedIds.includes(host.userId);
+  const { isAuthenticated, openAuthModal } = useAuth();
+
+  async function share() {
+    if (!host) return;
+    const outcome = await shareLink({
+      title: host.name,
+      text: `${host.name} on TROVE`,
+      url: window.location.href.split("?")[0],
+    });
+    if (outcome === "copied") toast.success("Link copied to clipboard");
+    else if (outcome === "failed") toast.error("Couldn't share this page.");
+  }
 
   if (isLoading) {
     return (
-      <div className="grid min-h-screen place-items-center">
+      <div className="grid min-h-screen place-items-center" role="status">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="sr-only">Loading</span>
       </div>
     );
   }
 
   if (!host) {
-    return (
-      <div className="p-10 text-center">
-        Spot not found. <Link to="/" className="text-primary">Go home</Link>
-      </div>
-    );
+    return <NotFoundState title="This Spot isn't on TROVE" body="Check the link, or find something else to do on Discover." />;
   }
 
   const cover = host.heroUrl ?? host.spots[0]?.image;
@@ -43,25 +56,25 @@ function HostPage() {
   return (
     <div className="mx-auto min-h-screen max-w-md pb-20">
       {/* Cover */}
-      <div className="relative h-48 overflow-hidden">
+      <header className="relative h-48 overflow-hidden">
         {cover && <img src={cover} alt="" className="h-full w-full object-cover opacity-60" />}
         <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4 pt-[max(env(safe-area-inset-top),1rem)]">
-          <Link to="/" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+          <Link to="/" aria-label="Back to Discover" className="grid h-10 w-10 place-items-center rounded-full glass-strong">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <button className="grid h-10 w-10 place-items-center rounded-full glass-strong">
+          <button type="button" onClick={share} aria-label={`Share ${host.name}`} className="grid h-10 w-10 place-items-center rounded-full glass-strong">
             <Share2 className="h-4 w-4" />
           </button>
         </div>
-      </div>
+      </header>
 
       <main className="-mt-14 px-5 space-y-6 relative">
         {/* Identity */}
         <section className="flex items-start gap-4">
           <div className="rounded-2xl p-[2px] bg-gradient-brand shadow-glow">
             <div className="grid h-20 w-20 place-items-center rounded-[14px] bg-background font-display text-2xl text-gradient">
-              {host.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+              {initials(host.name)}
             </div>
           </div>
           <div className="flex-1 pt-2">
@@ -91,7 +104,8 @@ function HostPage() {
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={() => toggleFollow.mutate(host.userId)}
+            onClick={() => (isAuthenticated ? toggleFollow.mutate(host.userId) : openAuthModal())}
+            aria-pressed={following}
             className={`flex-1 rounded-full py-2.5 text-sm font-semibold transition active:scale-[0.98] ${
               following
                 ? "bg-surface ring-1 ring-border text-foreground"
@@ -100,7 +114,7 @@ function HostPage() {
           >
             {following ? "Following ✓" : "Join community"}
           </button>
-          <button className="rounded-full bg-surface ring-1 ring-border px-4 text-sm font-semibold inline-flex items-center gap-1.5">
+          <button type="button" onClick={share} className="rounded-full bg-surface ring-1 ring-border px-4 text-sm font-semibold inline-flex items-center gap-1.5">
             <Users className="h-4 w-4" /> Invite
           </button>
         </div>
@@ -111,8 +125,8 @@ function HostPage() {
             <h2 className="font-display text-xl inline-flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" /> Upcoming events
             </h2>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {host.spots.length} posts
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              {host.spots.length} {host.spots.length === 1 ? "event" : "events"}
             </span>
           </div>
 
@@ -150,12 +164,12 @@ function HostPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 p-2.5 text-white">
                       {e.date && (
-                        <p className="text-[10px] font-mono uppercase tracking-wider text-accent">
+                        <p className="text-2xs font-mono uppercase tracking-wider text-accent">
                           {formatDate(e.date)} · {formatTime(e.date)}
                         </p>
                       )}
                       <p className="font-display text-sm leading-tight line-clamp-2">{e.name}</p>
-                      <p className="mt-0.5 text-[10px] text-white/70">{formatPrice(e.price)}</p>
+                      <p className="mt-0.5 text-xs text-white/80">{formatPrice(e.price)}</p>
                     </div>
                   </Link>
                 </motion.div>
@@ -195,11 +209,21 @@ function HostPage() {
   );
 }
 
+/** "House of Trove" → "HT" (skips small joining words). */
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter((w) => w && !/^(of|the|and|&)$/i.test(w))
+    .map((w) => w[0].toUpperCase())
+    .slice(0, 2)
+    .join("");
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-xl bg-surface ring-1 ring-border py-3">
       <div className="font-display text-lg text-gradient">{value}</div>
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+      <div className="text-xs uppercase text-muted-foreground">{label}</div>
     </div>
   );
 }

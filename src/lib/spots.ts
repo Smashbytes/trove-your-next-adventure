@@ -4,6 +4,11 @@ import adventure from "@/assets/spot-adventure.jpg";
 import rooftop from "@/assets/spot-rooftop.jpg";
 import paint from "@/assets/spot-paint.jpg";
 import techno from "@/assets/spot-techno.jpg";
+import { CATEGORIES, hostSlug } from "./format";
+
+// Demo catalogue only: loaded on demand for the showcase account (see
+// listings-api `useIsDemo`). Display helpers live in `./format`.
+export { CATEGORIES };
 
 export type Category =
   | "Nightlife"
@@ -31,46 +36,6 @@ export type City =
   | "East London"
   | "Hermanus"
   | "Mbombela";
-
-/** Display labels for city chips → maps to DB city values used in queries. */
-export const CITY_LABELS: Record<string, string> = {
-  "Joburg": "Johannesburg",
-  "Johannesburg": "Johannesburg",
-  "Pretoria": "Pretoria",
-  "Cape Town": "Cape Town",
-  "Stellenbosch": "Stellenbosch",
-  "Durban": "Durban",
-  "Gqeberha": "Gqeberha",
-  "Bloemfontein": "Bloemfontein",
-  "Polokwane": "Polokwane",
-  "Knysna": "Knysna",
-  "East London": "East London",
-};
-
-export const CATEGORIES: Category[] = [
-  "Nightlife",
-  "Food & Drink",
-  "Music",
-  "Adventure",
-  "Wellness",
-  "Arts & Culture",
-  "Family & Social",
-  "Community",
-];
-
-/** Display names shown in city chips. */
-export const CITIES: string[] = [
-  "Joburg",
-  "Pretoria",
-  "Cape Town",
-  "Stellenbosch",
-  "Durban",
-  "Gqeberha",
-  "Bloemfontein",
-  "Polokwane",
-  "Knysna",
-  "East London",
-];
 
 export interface Friend {
   id: string;
@@ -102,6 +67,8 @@ export interface Spot {
   friendsGoing: Friend[];
   hours: string;
   hostName: string;
+  /** Public profile slug for /host/$slug links (live data). */
+  hostSlug?: string;
   address: string;
   lat: number;
   lng: number;
@@ -992,30 +959,8 @@ export const spots: Spot[] = [
   }),
 ];
 
-export function capacityStatus(s: Spot): CapacityStatus {
-  if (!s.capacityMax || s.capacityMax <= 0) return "Empty";
-  const r = s.capacityBooked / s.capacityMax;
-  if (r >= 1) return "Full";
-  if (r >= 0.85) return "Almost Full";
-  if (r >= 0.4) return "Filling Up";
-  return "Empty";
-}
-
-export function capacityColor(status: CapacityStatus): string {
-  switch (status) {
-    case "Empty": return "var(--color-success)";
-    case "Filling Up": return "var(--color-warning)";
-    case "Almost Full": return "var(--color-primary)";
-    case "Full": return "var(--color-danger)";
-  }
-}
-
 export function getSpot(id: string) {
   return spots.find((s) => s.id === id);
-}
-
-export function hostSlug(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 export interface Host {
@@ -1458,20 +1403,6 @@ export function getHosts(): Host[] {
 
 export function getHost(slug: string): Host | undefined {
   return getHosts().find((h) => h.slug === slug);
-}
-
-export function formatPrice(n: number) {
-  if (n === 0) return "Free";
-  return `R${n.toLocaleString("en-ZA")}`;
-}
-
-export function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" });
-}
-
-export function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
 }
 
 export function editorsPicks(): Spot[] {

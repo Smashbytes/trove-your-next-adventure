@@ -5,8 +5,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
-import { useIsDemo } from "./listings-api";
-import { getSpot as getMockSpot, type Friend } from "./spots";
+import { UUID_RE, useIsDemo } from "./listings-api";
+import type { Friend } from "./spots";
 
 // Stable colour + initial for an avatar from a display name.
 function hueFromString(s: string): number {
@@ -30,8 +30,8 @@ export function useFriendsGoing(listingId: string | undefined) {
     queryKey: ["friends-going", demo, user?.id, listingId],
     enabled: !!listingId,
     queryFn: async () => {
-      if (demo) return getMockSpot(listingId!)?.friendsGoing ?? [];
-      if (!user) return [];
+      if (demo) return (await import("./spots")).getSpot(listingId!)?.friendsGoing ?? [];
+      if (!user || !UUID_RE.test(listingId!)) return [];
       const { data, error } = await supabase.rpc("friends_going", { p_listing_id: listingId! });
       if (error) throw error;
       return (data ?? []).map((r) => toFriend(r.id, r.full_name));

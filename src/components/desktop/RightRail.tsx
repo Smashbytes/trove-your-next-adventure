@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, Megaphone, UserPlus } from "lucide-react";
 import { useFriends } from "@/lib/friends-api";
 import { useAuth } from "@/lib/auth";
-import { formatDate } from "@/lib/spots";
+import { formatDate } from "@/lib/format";
 import type { Spot } from "@/lib/spots";
 
 function avatarHue(seed: string): number {
@@ -18,15 +18,15 @@ export function RightRail({ trending }: { trending: Spot[] }) {
   const top = trending.slice(0, 5);
 
   return (
-    <aside className="sticky top-[68px] hidden h-fit w-[320px] shrink-0 flex-col gap-5 py-6 pr-8 xl:flex">
+    <aside aria-label="Trending and your crew" className="sticky top-[68px] hidden h-fit w-[320px] shrink-0 flex-col gap-5 py-6 pr-8 xl:flex">
       {/* Your Crew — real accepted friends, honest empty state */}
       {isAuthenticated && (
         <section className="rounded-3xl bg-surface/50 p-5 ring-1 ring-border/50">
           <div className="flex items-center justify-between">
-            <h3 className="font-display text-base">Your Crew</h3>
+            <h2 className="font-display text-base">Your Crew</h2>
             <Link
               to="/profile"
-              className="text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
+              className="text-2xs font-medium text-muted-foreground transition hover:text-foreground"
             >
               See all
             </Link>
@@ -72,8 +72,8 @@ export function RightRail({ trending }: { trending: Spot[] }) {
       {/* Trending This Week — real listings, capacity-sorted */}
       <section className="rounded-3xl bg-surface/50 p-5 ring-1 ring-border/50">
         <div className="flex items-baseline justify-between">
-          <h3 className="font-display text-base">Trending Events</h3>
-          <span className="text-[11px] text-muted-foreground">This Week</span>
+          <h2 className="font-display text-base">Trending Events</h2>
+          <span className="text-2xs text-muted-foreground">This Week</span>
         </div>
         <ol className="mt-4 space-y-3.5">
           {top.map((s, i) => (
@@ -90,10 +90,10 @@ export function RightRail({ trending }: { trending: Spot[] }) {
                   <span className="block truncate text-sm font-semibold transition group-hover:text-primary">
                     {s.name}
                   </span>
-                  <span className="block text-[11px] text-muted-foreground">
+                  <span className="block text-2xs text-muted-foreground">
                     {formatDate(s.date)}
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground/70">
+                  <span className="block truncate text-2xs text-muted-foreground/70">
                     {s.area || s.city}
                   </span>
                 </span>
@@ -109,9 +109,9 @@ export function RightRail({ trending }: { trending: Spot[] }) {
       {/* Host CTA */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-soft p-5 ring-1 ring-primary/20">
         <span className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-primary/20 blur-2xl" />
-        <h3 className="font-display text-base">Host an Event?</h3>
+        <h2 className="font-display text-base">Host an event?</h2>
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Reach thousands of TROVE users across South Africa.
+          List it on TROVE and sell tickets to guests across South Africa.
         </p>
         <a
           href="https://trove-engine.pages.dev"

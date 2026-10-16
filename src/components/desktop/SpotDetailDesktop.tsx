@@ -21,7 +21,8 @@ import { openDirections } from "@/lib/maps";
 import { useAuth } from "@/lib/auth";
 import { useSavedIds, useToggleSave } from "@/lib/social";
 import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
-import { formatDate, formatPrice, formatTime, hostSlug, type Spot } from "@/lib/spots";
+import { formatDate, formatPrice, formatTime, hostSlug } from "@/lib/format";
+import type { Spot } from "@/lib/spots";
 import type { Friend } from "@/lib/spots";
 
 export function SpotDetailDesktop({
@@ -99,7 +100,7 @@ export function SpotDetailDesktop({
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
               <div className="absolute inset-x-5 top-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full glass-strong px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                  <span className="rounded-full glass-strong px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-primary">
                     {spot.category}
                   </span>
                   <CapacityPill spot={spot} />
@@ -148,7 +149,7 @@ export function SpotDetailDesktop({
               {spot.vibes.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {spot.vibes.map((v) => (
-                    <span key={v} className="rounded-full bg-surface-elevated px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <span key={v} className="rounded-full bg-surface-elevated px-2.5 py-1 text-2xs text-muted-foreground">
                       #{v}
                     </span>
                   ))}
@@ -161,7 +162,7 @@ export function SpotDetailDesktop({
               <section className="rounded-2xl bg-gradient-soft p-5 ring-1 ring-primary/30">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wider text-primary">Spark</p>
+                    <p className="text-2xs uppercase tracking-wider text-primary">Spark</p>
                     <h3 className="mt-0.5 font-display text-lg">Your crew is going</h3>
                   </div>
                   <button
@@ -195,7 +196,7 @@ export function SpotDetailDesktop({
                     {spot.address || "Tap for directions"}
                   </p>
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-brand px-4 py-2 text-[11px] font-bold text-primary-foreground shadow-glow-soft">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-brand px-4 py-2 text-2xs font-bold text-primary-foreground shadow-glow-soft">
                   <Navigation className="h-3.5 w-3.5" /> Directions
                 </span>
               </button>
@@ -251,21 +252,21 @@ export function SpotDetailDesktop({
               {/* Host */}
               <Link
                 to="/host/$slug"
-                params={{ slug: hostSlug(spot.hostName) }}
+                params={{ slug: spot.hostSlug || hostSlug(spot.hostName) }}
                 className="flex items-center gap-3 rounded-2xl bg-surface p-4 ring-1 ring-border transition hover:ring-primary/40"
               >
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-brand font-display text-sm text-primary-foreground">
                   {spot.hostName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase text-muted-foreground">Hosted by</p>
+                  <p className="text-2xs uppercase text-muted-foreground">Hosted by</p>
                   <p className="truncate text-sm font-semibold text-primary">{spot.hostName}</p>
                 </div>
               </Link>
 
               {spot.hours && (
                 <div className="rounded-2xl bg-surface p-4 ring-1 ring-border">
-                  <p className="text-[10px] uppercase text-muted-foreground">Hours</p>
+                  <p className="text-2xs uppercase text-muted-foreground">Hours</p>
                   <p className="mt-1 text-sm">{spot.hours}</p>
                 </div>
               )}
@@ -302,9 +303,9 @@ export function SpotDetailDesktop({
               </div>
 
               <div className="mt-4 rounded-2xl bg-gradient-soft p-4 text-center ring-1 ring-primary/30">
-                <p className="text-[10px] uppercase tracking-wider text-primary">Per person</p>
+                <p className="text-2xs uppercase tracking-wider text-primary">Per person</p>
                 <p className="mt-1 font-display text-3xl text-gradient">{formatPrice(perPerson)}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-2xs text-muted-foreground">
                   {formatPrice(total)} ÷ {splitCount} {splitCount === 1 ? "person" : "people"}
                 </p>
               </div>
@@ -328,7 +329,7 @@ export function SpotDetailDesktop({
                       </div>
                       <div className="flex-1 text-left">
                         <p className="text-sm font-semibold">{f.name}</p>
-                        <p className="text-[11px] text-muted-foreground">Friend</p>
+                        <p className="text-2xs text-muted-foreground">Friend</p>
                       </div>
                       <div
                         className={`grid h-6 w-6 place-items-center rounded-full ${
@@ -363,7 +364,7 @@ function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; la
         {icon}
         <span className="truncate font-display text-base">{value}</span>
       </div>
-      <span className="truncate text-[10px] text-muted-foreground">{label}</span>
+      <span className="truncate text-2xs text-muted-foreground">{label}</span>
     </div>
   );
 }

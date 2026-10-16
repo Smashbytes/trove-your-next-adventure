@@ -1,13 +1,25 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { AuthModal } from "@/components/AuthModal";
-import { NotificationCenter } from "@/components/NotificationCenter";
+// Both are only needed after a tap (sign-in) or once signed in (live
+// notifications), so they stay out of the entry bundle.
+const loadAuthModal = () => import("@/components/AuthModal");
+const AuthModal = lazy(() => loadAuthModal().then((m) => ({ default: m.AuthModal })));
+const SplashScreen = lazy(() => import("@/components/SplashScreen").then((m) => ({ default: m.SplashScreen })));
+const NotificationCenter = lazy(() =>
+  import("@/components/NotificationCenter").then((m) => ({ default: m.NotificationCenter })),
+);
 import { queryClient } from "@/lib/query-client";
 
 import appCss from "../styles.css?url";
+import { BrandStage } from "@/components/BrandStage";
+
+const SITE_URL = ((import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || "https://trove-your-next-adventure.pages.dev").replace(/\/$/, "");
+const TITLE = "TROVE — Discover. Book. Experience.";
+const DESCRIPTION = "Discover and book South Africa's best events, nightlife, food and adventures in seconds.";
+const OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,36 +27,20 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#0a0612" },
-      { title: "TROVE — Decide. Book. Show Up." },
-      {
-        name: "description",
-        content:
-          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
-      },
-      { property: "og:title", content: "TROVE — Decide. Book. Show Up." },
-      {
-        property: "og:description",
-        content:
-          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
-      },
+      { name: "trove-build", content: __TROVE_BUILD__ },
+      { title: TITLE },
+      { name: "description", content: DESCRIPTION },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "TROVE" },
+      { property: "og:image", content: OG_IMAGE },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "TROVE — Decide. Book. Show Up." },
-      {
-        name: "twitter:description",
-        content:
-          "Discover and book South Africa's best nightlife, comedy and adventures in seconds.",
-      },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/711a9d30-b017-40d2-af9b-68f3ca19acf5/id-preview-0ebde4d8--58d6995d-47ea-4b9a-853c-43ccc7f53917.lovable.app-1777236622317.png",
-      },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESCRIPTION },
+      { name: "twitter:image", content: OG_IMAGE },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -66,10 +62,12 @@ export const Route = createRootRoute({
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 text-center">
+    <main className="flex min-h-screen items-center justify-center px-6 text-center">
       <div>
-        <h1 className="font-display text-7xl text-gradient">404</h1>
-        <p className="mt-3 text-muted-foreground">This spot doesn't exist (yet).</p>
+        <h1 className="font-display text-7xl text-gradient">
+          404<span className="sr-only"> — page not found</span>
+        </h1>
+        <p className="mt-3 text-muted-foreground">This page doesn't exist (yet).</p>
         <a
           href="/"
           className="mt-6 inline-flex rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow"
@@ -77,7 +75,7 @@ function NotFoundComponent() {
           Back to Discover
         </a>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -96,12 +94,46 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function AppWithAuth() {
-  const { showAuthModal, closeAuthModal } = useAuth();
+  const { showAuthModal, closeAuthModal, isAuthenticated } = useAuth();
+  const [authLoaded, setAuthLoaded] = useState(false);
+  // This tree only renders in the browser (see RootComponent), so session
+  // storage can be read up front: the first launch of a session plays the
+  // splash; the static stage covers the moment while its code loads.
+  const [playSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem("trove_splash_seen");
+    } catch {
+      return false;
+    }
+  });
+
+  // Fetch the sign-in dialog in the background once the page is idle, so it
+  // opens instantly when someone taps "Log in".
+  useEffect(() => {
+    const idle = (window as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    const run = () => void loadAuthModal().then(() => setAuthLoaded(true));
+    if (idle) idle(run);
+    else setTimeout(run, 1500);
+  }, []);
+
   return (
     <>
       <Outlet />
-      <AuthModal open={showAuthModal} onClose={closeAuthModal} />
-      <NotificationCenter />
+      {playSplash && (
+        <Suspense fallback={<BrandStage />}>
+          <SplashScreen />
+        </Suspense>
+      )}
+      {(showAuthModal || authLoaded) && (
+        <Suspense fallback={null}>
+          <AuthModal open={showAuthModal} onClose={closeAuthModal} />
+        </Suspense>
+      )}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <NotificationCenter />
+        </Suspense>
+      )}
       <Toaster position="top-center" richColors />
     </>
   );
@@ -121,8 +153,25 @@ function RootComponent() {
           <AppWithAuth />
         </AuthProvider>
       ) : (
-        <div className="min-h-screen bg-background" aria-busy="true" />
+        <BootShell />
       )}
     </QueryClientProvider>
+  );
+}
+
+/**
+ * What the server sends (and what shows before JavaScript runs). The app itself
+ * mounts client-side only — see "fix: stabilize guest hydration" — so this
+ * keeps the first paint branded instead of a blank black page.
+ */
+function BootShell() {
+  return (
+    <BrandStage>
+      <noscript>
+        <p className="mt-6 max-w-xs px-6 text-center text-sm text-muted-foreground">
+          TROVE needs JavaScript to run. Turn it on in your browser settings to discover and book events.
+        </p>
+      </noscript>
+    </BrandStage>
   );
 }

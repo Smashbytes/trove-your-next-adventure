@@ -34,6 +34,7 @@ export function TopBar() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search events, venues, people…"
+          aria-label="Search events, venues and people"
           className="h-11 w-full rounded-full border border-border/60 bg-surface/60 pl-11 pr-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary/40 focus:bg-surface focus:ring-2 focus:ring-primary/20"
         />
       </form>
@@ -53,7 +54,7 @@ export function TopBar() {
         >
           <Bell className="h-[18px] w-[18px]" />
           {unread > 0 && (
-            <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-glow">
+            <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-foreground shadow-glow">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
@@ -75,7 +76,7 @@ export function TopBar() {
             </span>
             <span className="hidden leading-tight xl:block">
               <span className="block max-w-[120px] truncate text-sm font-semibold">{name}</span>
-              <span className="block text-[11px] text-muted-foreground">View profile</span>
+              <span className="block text-2xs text-muted-foreground">View profile</span>
             </span>
             <ChevronDown className="hidden h-4 w-4 text-muted-foreground xl:block" />
           </Link>

@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import {
   ArrowLeft, Check, Clock, Loader2, Lock, PartyPopper, ShieldCheck,
   Ticket, Users2, X, Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useListing, koboToRand } from "@/lib/listings-api";
-import { formatPrice, formatDate, formatTime } from "@/lib/spots";
+import { formatPrice, formatDate, formatTime } from "@/lib/format";
 import { setCheckoutIntent } from "@/lib/store";
 import {
   usePaySplitShare,
@@ -86,11 +87,11 @@ function SplitPage() {
               }}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] uppercase tracking-wider text-accent">
+              <p className="text-2xs uppercase tracking-wider text-accent">
                 {formatDate(spot.date)} · {formatTime(spot.date)}
               </p>
               <p className="truncate font-display text-base">{spot.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
+              <p className="truncate text-2xs text-muted-foreground">
                 {split.qty} ticket{split.qty > 1 ? "s" : ""} · total {formatPrice(koboToRand(split.ticketTotalKobo))}
               </p>
             </div>
@@ -110,7 +111,7 @@ function SplitPage() {
               <ParticipantRow key={p.shareId} p={p} isMe={p.userId === user?.id} />
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-2xs text-muted-foreground">
             Each person pays their share + {formatPrice(koboToRand(split.feePerShareKobo))} split processing fee.
           </p>
         </section>
@@ -246,15 +247,15 @@ function ParticipantRow({ p, isMe }: { p: SplitParticipantRow; isMe: boolean }) 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
           {display}
-          {p.isInitiator && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-accent">Organiser</span>}
+          {p.isInitiator && <span className="ml-1.5 text-2xs uppercase tracking-wide text-accent">Organiser</span>}
         </p>
         {p.status !== "declined" && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {formatPrice(koboToRand(p.shareKobo))} + {formatPrice(koboToRand(p.feeKobo))} fee
           </p>
         )}
       </div>
-      <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${b.cls}`}>{b.label}</span>
+      <span className={`rounded-full px-2.5 py-1 text-2xs font-semibold ${b.cls}`}>{b.label}</span>
     </div>
   );
 }
@@ -282,7 +283,7 @@ function Actions({ split, mine, isInitiator }: {
         toast("Split cancelled.");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong.");
+      toast.error(friendlyError(e, "Something went wrong."));
     } finally {
       setBusy(null);
     }
@@ -294,7 +295,7 @@ function Actions({ split, mine, isInitiator }: {
       const { authorization_url } = await pay.mutateAsync(split.id);
       window.location.href = authorization_url;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't start payment.");
+      toast.error(friendlyError(e, "Couldn't start payment."));
       setBusy(null);
     }
   }

@@ -1,7 +1,7 @@
 {
-  "name": "TROVE — Decide. Book. Show Up.",
+  "name": "TROVE — Discover. Book. Experience.",
   "short_name": "TROVE",
-  "description": "Discover and book the best nightlife, comedy, and adventures in South Africa.",
+  "description": "Discover and book South Africa's best events, nightlife, food and adventures.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

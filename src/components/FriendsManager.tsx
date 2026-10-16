@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import { UserPlus, Check, X } from "lucide-react";
 import {
   useFriends,
@@ -28,7 +29,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
       toast.success(`Friend request sent to ${name}.`);
       setEmail("");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't send request.");
+      toast.error(friendlyError(e, "Couldn't send request."));
     }
   }
 
@@ -48,6 +49,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
           onKeyDown={(e) => e.key === "Enter" && add()}
           type="email"
           placeholder="Add a friend by email"
+          aria-label="Add a friend by email"
           className="flex-1 rounded-full bg-surface-elevated px-4 py-2.5 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
         />
         <button
@@ -62,7 +64,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
       {/* Incoming requests */}
       {incoming.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requests</p>
+          <p className="text-2xs uppercase tracking-wider text-muted-foreground">Requests</p>
           {incoming.map((f) => (
             <div key={f.friendId} className="flex items-center gap-3 rounded-2xl bg-surface-elevated p-2.5">
               <Avatar name={f.name} url={f.avatarUrl} />
@@ -95,7 +97,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
               <p className="flex-1 truncate text-sm font-medium">{f.name}</p>
               <button
                 onClick={() => remove.mutate(f.friendId)}
-                className="text-[11px] text-muted-foreground transition hover:text-destructive"
+                className="text-2xs text-muted-foreground transition hover:text-destructive"
               >
                 Remove
               </button>
@@ -113,12 +115,12 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
       {/* Outgoing (pending) */}
       {outgoing.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending</p>
+          <p className="text-2xs uppercase tracking-wider text-muted-foreground">Pending</p>
           {outgoing.map((f) => (
             <div key={f.friendId} className="flex items-center gap-3 rounded-2xl bg-surface-elevated/60 p-2.5">
               <Avatar name={f.name} url={f.avatarUrl} />
               <p className="flex-1 truncate text-sm font-medium text-muted-foreground">{f.name}</p>
-              <span className="text-[11px] text-muted-foreground">Requested</span>
+              <span className="text-2xs text-muted-foreground">Requested</span>
             </div>
           ))}
         </div>

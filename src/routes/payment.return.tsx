@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowLeft, RotateCcw, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useBooking } from "@/lib/bookings-api";
-import { formatPrice } from "@/lib/spots";
+import { formatPrice } from "@/lib/format";
 import { clearPendingPayment, getPendingPayment, type PendingPayment } from "@/lib/store";
 
 /**
@@ -124,7 +124,7 @@ function PaymentReturnPage() {
           ? "Checking on your booking."
           : `We're waiting for TradeSafe to confirm ${formatPrice(pending.total)}. This page updates on its own.`}
       </p>
-      <p className="mt-6 text-[11px] text-muted-foreground">
+      <p className="mt-6 text-xs text-muted-foreground">
         Safe to close this page — your ticket lands in My tickets as soon as it's confirmed.
       </p>
       <Link to="/tickets" className="mt-4 inline-flex text-xs text-muted-foreground underline">
@@ -136,17 +136,18 @@ function PaymentReturnPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto min-h-screen max-w-md p-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-12">
-      <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+    <main className="mx-auto min-h-screen max-w-md p-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-12">
+      <Link to="/" className="inline-flex items-center gap-2 py-1 text-sm text-muted-foreground">
         <ArrowLeft className="h-4 w-4" /> Home
       </Link>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mt-10 text-center"
+        aria-live="polite"
       >
         {children}
       </motion.div>
-    </div>
+    </main>
   );
 }

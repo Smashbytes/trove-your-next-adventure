@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { HostProfile, Profile } from './database.types';
+import { hydratePrefsFromProfile } from './guest-prefs';
 
 // ---------------------------------------------------------------------------
 // Context
@@ -22,7 +23,7 @@ interface AuthContextValue {
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   verifyEmailOtp: (email: string, token: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
+  signOut: () => Promise<boolean>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -70,12 +71,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // IMPORTANT: this callback runs while supabase-js holds its auth lock. Never
+    // await another Supabase call in here: it waits for the same lock and
+    // deadlocks every later auth call (sign-out, sign-in, token refresh) —
+    // the "Sign out does nothing" bug. Profile loads are deferred instead.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       setSession(session);
       if (session) {
         setShowAuthModal(false);
-        await fetchProfile(session.user.id);
+        // A token refresh doesn't change who is signed in; skip the refetch.
+        if (event !== 'TOKEN_REFRESHED') {
+          setTimeout(() => {
+            if (!cancelled) void fetchProfile(session.user.id);
+          }, 0);
+        }
       } else {
         setProfile(null);
         setHostProfile(null);
@@ -101,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
       if (pErr) console.error('[auth] profiles fetch failed:', pErr);
       setProfile(p ?? null);
+      // The account is the source of truth for onboarding/Settings choices.
+      if (p) hydratePrefsFromProfile(p);
 
       if (p?.is_host) {
         const { data: hp, error: hpErr } = await supabase
@@ -155,8 +167,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  /**
+   * Sign out everywhere (revokes the refresh token on the server). If the
+   * server call fails or stalls, still end the session on this device so the
+   * button never "does nothing". Returns false only if nothing could be done.
+   */
+  const signOut = async (): Promise<boolean> => {
+    const local = () => supabase.auth.signOut({ scope: 'local' });
+    try {
+      const result = await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<{ error: Error }>((resolve) =>
+          setTimeout(() => resolve({ error: new Error('sign-out timed out') }), 6000),
+        ),
+      ]);
+      if (result.error) {
+        console.error('[auth] global sign-out failed, ending local session:', result.error);
+        await local();
+      }
+    } catch (error) {
+      console.error('[auth] sign-out threw, ending local session:', error);
+      try {
+        await local();
+      } catch {
+        return false;
+      }
+    }
+    setSession(null);
+    setProfile(null);
+    setHostProfile(null);
+    return true;
   };
 
   const refreshProfile = async () => {

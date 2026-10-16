@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -45,6 +45,20 @@ function ProfilePage() {
   const [savingName, setSavingName] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    const ok = await signOut();
+    setSigningOut(false);
+    if (!ok) {
+      toast.error("We couldn't sign you out. Check your connection and try again.");
+      return;
+    }
+    toast.success("You're signed out. See you soon!");
+    navigate({ to: "/" });
+  }
 
   async function saveName() {
     if (!user || nameInput.trim().length < 2) return;
@@ -157,7 +171,7 @@ function ProfilePage() {
                 <Camera className="h-5 w-5 text-white" />
               </span>
               {uploading && (
-                <span className="absolute inset-0 grid place-items-center bg-black/60 text-[10px] font-semibold text-white">
+                <span className="absolute inset-0 grid place-items-center bg-black/60 text-2xs font-semibold text-white">
                   …
                 </span>
               )}
@@ -176,6 +190,8 @@ function ProfilePage() {
                   <input
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
+                    aria-label="Your name"
+                    maxLength={80}
                     className="w-full rounded-lg bg-background/60 px-2 py-1 font-display text-lg ring-1 ring-border focus:outline-none"
                     autoFocus
                   />
@@ -230,13 +246,16 @@ function ProfilePage() {
         </section>
 
         <button
-          onClick={() => signOut()}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3 text-sm font-medium text-muted-foreground ring-1 ring-border"
+          type="button"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          aria-busy={signingOut || undefined}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface py-3 text-sm font-medium text-muted-foreground ring-1 ring-border transition hover:text-foreground disabled:opacity-60"
         >
-          <LogOut className="h-4 w-4" /> Sign out
+          <LogOut className="h-4 w-4" /> {signingOut ? "Signing out…" : "Sign out"}
         </button>
 
-        <p className="pt-2 text-center text-[11px] text-muted-foreground">
+        <p className="pt-2 text-center text-2xs text-muted-foreground">
           TROVE v1.0 · Made in South Africa 🇿🇦
         </p>
       </div>
@@ -271,7 +290,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl bg-background/40 p-3">
       <div className="font-display text-xl text-gradient">{value}</div>
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+      <div className="text-2xs uppercase text-muted-foreground">{label}</div>
     </div>
   );
 }

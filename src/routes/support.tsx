@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import { ArrowLeft, Plus, LifeBuoy, Send, MessageSquare } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useAuth } from "@/lib/auth";
@@ -155,7 +156,7 @@ function NewTicket({
       toast.success("Request sent — we'll be in touch.");
       onCreated(t);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't send your request.");
+      toast.error(friendlyError(e, "Couldn't send your request."));
     }
   }
 
@@ -299,7 +300,7 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
                   }`}
                 >
                   {!mine && (
-                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    <p className="mb-0.5 text-2xs font-semibold uppercase tracking-wide text-primary">
                       TROVE Support
                     </p>
                   )}
@@ -352,7 +353,7 @@ function statusTone(status: string): { label: string; cls: string; dot: string }
 function StatusBadge({ status }: { status: string }) {
   const t = statusTone(status);
   return (
-    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${t.cls}`}>
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-2xs font-semibold ${t.cls}`}>
       {t.label}
     </span>
   );

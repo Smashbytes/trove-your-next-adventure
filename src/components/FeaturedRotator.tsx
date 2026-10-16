@@ -65,14 +65,14 @@ export function FeaturedRotator({ items }: { items: Spot[] }) {
           </div>
 
           <div className="relative max-w-[64%] p-5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
               {item.city ? `${item.city} · Featured` : "Featured"}
             </span>
             <h2 className="mt-2 font-display text-xl leading-[1.05] text-foreground line-clamp-2">
               {item.name}
             </h2>
             {item.tagline && (
-              <p className="mt-1.5 text-[12px] text-muted-foreground line-clamp-2">{item.tagline}</p>
+              <p className="mt-1.5 text-sm text-muted-foreground line-clamp-2">{item.tagline}</p>
             )}
             <div className="mt-4 flex items-center gap-2.5">
               <Link
@@ -95,17 +95,22 @@ export function FeaturedRotator({ items }: { items: Spot[] }) {
 
       {/* Progress dots */}
       {count > 1 && (
-        <div className="absolute bottom-3 right-4 z-10 flex items-center gap-1.5">
+        <div className="absolute bottom-2 right-3 z-10 flex items-center">
           {items.map((s, idx) => (
             <button
               key={s.id}
+              type="button"
               onClick={() => setI(idx)}
               aria-label={`Show ${s.name}`}
               aria-current={idx === i}
-              className={`h-1.5 rounded-full transition-all ${
-                idx === i ? "w-5 bg-primary" : "w-1.5 bg-white/30"
-              }`}
-            />
+              className="grid h-6 min-w-6 place-items-center"
+            >
+              <span
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === i ? "w-5 bg-primary" : "w-1.5 bg-white/40"
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

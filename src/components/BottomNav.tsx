@@ -18,7 +18,7 @@ export function BottomNav() {
   // the unread count is only visible on Discover and the desktop top bar.
   const unread = useUnreadCount();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom)]">
+    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-md px-3 pb-3">
         <div className="glass-strong rounded-2xl px-2 py-2 shadow-glow-soft">
           <ul className="flex items-center justify-between">
@@ -29,6 +29,8 @@ export function BottomNav() {
                 <li key={t.to} className="flex-1">
                   <Link
                     to={t.to}
+                    aria-current={active ? "page" : undefined}
+                    aria-label={t.to === "/profile" && isAuthenticated && unread > 0 ? `${t.label}, ${unread} unread notifications` : undefined}
                     className="relative flex flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 transition"
                   >
                     <Icon
@@ -36,7 +38,7 @@ export function BottomNav() {
                       strokeWidth={active ? 2.4 : 1.8}
                     />
                     <span
-                      className={`text-[10px] font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}
+                      className={`text-2xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}
                     >
                       {t.label}
                     </span>
@@ -44,7 +46,7 @@ export function BottomNav() {
                       <span className="absolute -top-1 h-1 w-8 rounded-full bg-gradient-brand shadow-glow" />
                     )}
                     {t.to === "/profile" && isAuthenticated && unread > 0 && (
-                      <span className="absolute right-1.5 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow-glow">
+                      <span aria-hidden="true" className="absolute right-1.5 top-0 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-foreground shadow-glow">
                         {unread > 9 ? "9+" : unread}
                       </span>
                     )}
