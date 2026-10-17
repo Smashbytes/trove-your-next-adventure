@@ -31,6 +31,13 @@ function init(): Promise<PostHog | null> {
         capture_pageleave: true,
         person_profiles: "identified_only", // never identified → stays anonymous
         autocapture: false, // pageviews + explicit events only
+        // Anonymous pageview stats only. These add-ons each download an extra
+        // script from PostHog; we use none of them (and the Privacy Policy
+        // covers anonymous usage stats, not recordings), and on a slow
+        // connection the download keeps the browser "loading".
+        disable_surveys: true,
+        disable_session_recording: true,
+        disable_web_experiments: true,
       });
       posthog.register({ app: "guest" });
       // Honour the current preference, even if it changed while loading, and
