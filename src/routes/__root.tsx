@@ -1,16 +1,43 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
-// Both are only needed after a tap (sign-in) or once signed in (live
-// notifications), so they stay out of the entry bundle.
+import { toast } from "sonner";
+
+// These are only needed after a tap (sign-in), once signed in (live
+// notifications) or once per session (launch animation), so they stay out of
+// the entry bundle. A chunk that fails to download (flaky mobile data) must
+// never take the app down: each falls back to something harmless instead.
 const loadAuthModal = () => import("@/components/AuthModal");
-const AuthModal = lazy(() => loadAuthModal().then((m) => ({ default: m.AuthModal })));
-const SplashScreen = lazy(() => import("@/components/SplashScreen").then((m) => ({ default: m.SplashScreen })));
-const NotificationCenter = lazy(() =>
-  import("@/components/NotificationCenter").then((m) => ({ default: m.NotificationCenter })),
+const AuthModal = lazy<ComponentType<{ open: boolean; onClose?: () => void }>>(() =>
+  loadAuthModal()
+    .then((m) => ({ default: m.AuthModal }))
+    .catch(() => ({ default: AuthModalUnavailable })),
 );
+const SplashScreen = lazy<ComponentType>(() =>
+  import("@/components/SplashScreen")
+    .then((m) => ({ default: m.SplashScreen }))
+    .catch(() => ({ default: () => null })),
+);
+const NotificationCenter = lazy<ComponentType>(() =>
+  import("@/components/NotificationCenter")
+    .then((m) => ({ default: m.NotificationCenter }))
+    .catch(() => ({ default: () => null })),
+);
+
+/** Shown if the sign-in dialog's code couldn't be downloaded. */
+function AuthModalUnavailable({ open, onClose }: { open: boolean; onClose?: () => void }) {
+  useEffect(() => {
+    if (!open) return;
+    toast.error("We couldn't open sign-in. Check your connection and try again.", { id: "auth-unavailable" });
+    onClose?.();
+  }, [open, onClose]);
+  return null;
+}
+
+/** How long the static launch stage may wait for the splash code (ms). */
+const SPLASH_WAIT_MS = 1200;
 import { queryClient } from "@/lib/query-client";
 
 import appCss from "../styles.css?url";
@@ -99,7 +126,7 @@ function AppWithAuth() {
   // This tree only renders in the browser (see RootComponent), so session
   // storage can be read up front: the first launch of a session plays the
   // splash; the static stage covers the moment while its code loads.
-  const [playSplash] = useState(() => {
+  const [playSplash, setPlaySplash] = useState(() => {
     try {
       return !sessionStorage.getItem("trove_splash_seen");
     } catch {
@@ -111,7 +138,12 @@ function AppWithAuth() {
   // opens instantly when someone taps "Log in".
   useEffect(() => {
     const idle = (window as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
-    const run = () => void loadAuthModal().then(() => setAuthLoaded(true));
+    const run = () =>
+      void loadAuthModal()
+        .then(() => setAuthLoaded(true))
+        .catch(() => {
+          /* offline: the dialog loads (or explains) when someone taps Log in */
+        });
     if (idle) idle(run);
     else setTimeout(run, 1500);
   }, []);
@@ -120,7 +152,22 @@ function AppWithAuth() {
     <>
       <Outlet />
       {playSplash && (
-        <Suspense fallback={<BrandStage />}>
+        <Suspense
+          fallback={
+            <TimedStage
+              onExpire={() => {
+                // Slow connection: skip the animation this time rather than
+                // keep the app covered.
+                try {
+                  sessionStorage.setItem("trove_splash_seen", "1");
+                } catch {
+                  /* ignore */
+                }
+                setPlaySplash(false);
+              }}
+            />
+          }
+        >
           <SplashScreen />
         </Suspense>
       )}
@@ -164,6 +211,15 @@ function RootComponent() {
  * mounts client-side only — see "fix: stabilize guest hydration" — so this
  * keeps the first paint branded instead of a blank black page.
  */
+/** The static launch stage, for at most SPLASH_WAIT_MS while the splash code loads. */
+function TimedStage({ onExpire }: { onExpire: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onExpire, SPLASH_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [onExpire]);
+  return <BrandStage />;
+}
+
 function BootShell() {
   return (
     <BrandStage>
