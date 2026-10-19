@@ -25,6 +25,9 @@ type DeliveryMethod = "email" | "whatsapp";
 type DetailErrors = Partial<Record<"firstName" | "lastName" | "email" | "phone" | "idNumber" | "terms" | string, string>>;
 
 const WHATSAPP_DELIVERY_FEE_RAND = 5;
+// WhatsApp ticket delivery stays hidden until TROVE's WhatsApp sender is live
+// (the booking functions refuse it with `whatsapp_unavailable` until then).
+const WHATSAPP_DELIVERY_ON = import.meta.env.VITE_WHATSAPP_DELIVERY === "true";
 const CHECKOUT_HOLD_MIN = 15;
 const LEGAL = "https://welovetrove.co.za/legal";
 
@@ -354,6 +357,7 @@ function CheckoutPage() {
               ))}
 
               {/* Ticket delivery */}
+              {WHATSAPP_DELIVERY_ON && (
               <fieldset className="space-y-1.5">
                 <legend className="block px-1 pb-1.5 text-xs uppercase tracking-wider text-muted-foreground">
                   Ticket delivery
@@ -367,6 +371,7 @@ function CheckoutPage() {
                   </ChoiceButton>
                 </div>
               </fieldset>
+              )}
 
               <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
                 <ShieldCheck className="h-3 w-3 text-success" />
