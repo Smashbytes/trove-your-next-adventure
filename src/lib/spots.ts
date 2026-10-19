@@ -76,6 +76,10 @@ export interface Spot {
   tags?: string[];
   /** Host-defined extra checkout questions (Engine "more info"). */
   customQuestions?: CustomQuestion[];
+  /** listings.booking_mode — "slot" listings are booked per time slot. */
+  bookingMode?: string;
+  /** Stays: rooms the host offers (listings.metadata.rooms), price in Rand. */
+  rooms?: Array<{ name: string; capacity?: number; price: number }>;
 }
 
 export interface CustomQuestion {

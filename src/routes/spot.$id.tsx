@@ -16,6 +16,8 @@ import { useCreateSplit, useGroupMembers, useMyGroups } from "@/lib/spark-api";
 import { useSavedIds, useToggleSave } from "@/lib/social";
 import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
 import { fetchSpotOg, guestShareUrl, rememberShareRef, shareLink, spotOgMeta } from "@/lib/share";
+import { toSelected, useBookingOptions, type BookingOption } from "@/lib/booking-options";
+import { BookingOptionPicker } from "@/components/BookingOptionPicker";
 import { useEffect, useState, useMemo } from "react";
 
 export const Route = createFileRoute("/spot/$id")({
@@ -69,15 +71,22 @@ function SpotPage() {
   const createSplit = useCreateSplit();
   const [sendingSplit, setSendingSplit] = useState(false);
 
-  const total = spot ? spot.price * qty : 0;
+  // Ticket tier / time slot / room. The first is preselected; the server
+  // re-prices whatever is chosen.
+  const { data: options = [], isLoading: optionsLoading } = useBookingOptions(spot, demo);
+  const [pickedOptionId, setPickedOptionId] = useState<string | undefined>();
+  const chosen: BookingOption | undefined =
+    options.find((o) => o.id === pickedOptionId) ?? options[0];
+  const unitPrice = chosen ? chosen.unitPrice : (spot?.price ?? 0);
+
+  const total = spot ? unitPrice * qty : 0;
   const splitCount = pickedFriends.length + 1; // include me
   // Round each share up to the cent so the shares always cover the total.
   const perPerson = useMemo(() => Math.ceil((total * 100) / splitCount) / 100, [total, splitCount]);
 
-  // Demo keeps the mock split-at-checkout; live users send a real split request.
-  const canSplit = demo
-    ? friendsGoing.length > 0
-    : isAuthenticated && (spot?.price ?? 0) > 0 && linkedFriends.length > 0;
+  // Demo keeps the mock split-at-checkout. Live split payments are switched off
+  // until TradeSafe wallet settlement is certified (split-create returns 409).
+  const canSplit = demo ? friendsGoing.length > 0 : false;
 
   async function sendSplitRequest() {
     if (!spot || pickedFriends.length === 0) return;
@@ -142,7 +151,7 @@ function SpotPage() {
     }
     // Persist the intent first so it survives the auth detour, then require an
     // account before checkout.
-    setCheckoutIntent({ spotId: spot.id, qty, total, split });
+    setCheckoutIntent({ spotId: spot.id, qty, total, split, option: chosen ? toSelected(chosen) : undefined });
     if (!isAuthenticated) {
       openAuthModal();
       return;
@@ -173,7 +182,7 @@ function SpotPage() {
       </div>
       <div className="mx-auto min-h-dvh max-w-md pb-32 lg:hidden">
       {/* Hero image */}
-      <div className="relative">
+      <header className="relative">
         <div className="relative h-[60vh] overflow-hidden">
           <img
             src={spot.image}
@@ -218,7 +227,7 @@ function SpotPage() {
           <h1 className="font-display text-3xl leading-tight">{spot.name}</h1>
           <p className="text-sm font-medium text-muted-foreground">{spot.tagline}</p>
         </div>
-      </div>
+      </header>
 
       <main className="px-5 pt-5 space-y-6">
         {/* Stats */}
@@ -256,6 +265,12 @@ function SpotPage() {
         <div className="rounded-2xl bg-surface ring-1 ring-border p-4">
           <CapacityBar spot={spot} />
         </div>
+
+        <BookingOptionPicker
+          options={options}
+          selectedId={chosen?.id}
+          onSelect={(o) => setPickedOptionId(o.id)}
+        />
 
         {/* About */}
         <section>
@@ -516,7 +531,7 @@ function SpotPage() {
       </AnimatePresence>
 
       {/* Sticky book bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+      <section aria-label="Book this spot" className="fixed inset-x-0 bottom-0 z-40 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <motion.div
           initial={{ y: 80 }} animate={{ y: 0 }}
           className="mx-auto max-w-md px-3"
@@ -537,13 +552,14 @@ function SpotPage() {
             </div>
             <button
               onClick={book}
-              className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow active:scale-[0.98] transition"
+              disabled={optionsLoading}
+              className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow active:scale-[0.98] transition disabled:opacity-50"
             >
               Book now
             </button>
           </div>
         </motion.div>
-      </div>
+      </section>
       </div>
     </>
   );

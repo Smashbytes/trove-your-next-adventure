@@ -24,6 +24,9 @@ import { setCheckoutIntent, type SplitParticipant } from "@/lib/store";
 import { formatDate, formatPrice, formatTime, hostSlug } from "@/lib/format";
 import type { Spot } from "@/lib/spots";
 import type { Friend } from "@/lib/spots";
+import { useIsDemo } from "@/lib/listings-api";
+import { toSelected, useBookingOptions, type BookingOption } from "@/lib/booking-options";
+import { BookingOptionPicker } from "@/components/BookingOptionPicker";
 
 export function SpotDetailDesktop({
   spot,
@@ -43,8 +46,14 @@ export function SpotDetailDesktop({
   const [qty, setQty] = useState(1);
   const [splitOpen, setSplitOpen] = useState(false);
   const [pickedFriends, setPickedFriends] = useState<string[]>([]);
+  const demo = useIsDemo();
 
-  const total = spot.price * qty;
+  const { data: options = [], isLoading: optionsLoading } = useBookingOptions(spot, demo);
+  const [pickedOptionId, setPickedOptionId] = useState<string | undefined>();
+  const chosen: BookingOption | undefined = options.find((o) => o.id === pickedOptionId) ?? options[0];
+  const unitPrice = chosen ? chosen.unitPrice : spot.price;
+
+  const total = unitPrice * qty;
   const splitCount = pickedFriends.length + 1;
   const perPerson = useMemo(() => Math.ceil(total / splitCount), [total, splitCount]);
 
@@ -63,7 +72,7 @@ export function SpotDetailDesktop({
       ];
       split = { participants, perPerson };
     }
-    setCheckoutIntent({ spotId: spot.id, qty, total, split });
+    setCheckoutIntent({ spotId: spot.id, qty, total, split, option: chosen ? toSelected(chosen) : undefined });
     if (!isAuthenticated) {
       openAuthModal();
       return;
@@ -208,9 +217,19 @@ export function SpotDetailDesktop({
             <div className="sticky top-[88px] space-y-4">
               <div className="rounded-3xl bg-surface p-5 ring-1 ring-border">
                 <div className="flex items-baseline justify-between">
-                  <span className="font-display text-3xl text-gradient">{formatPrice(spot.price)}</span>
+                  <span className="font-display text-3xl text-gradient">{formatPrice(unitPrice)}</span>
                   <span className="text-xs text-muted-foreground">per ticket</span>
                 </div>
+
+                {options.length > 1 && (
+                  <div className="mt-4">
+                    <BookingOptionPicker
+                      options={options}
+                      selectedId={chosen?.id}
+                      onSelect={(o) => setPickedOptionId(o.id)}
+                    />
+                  </div>
+                )}
 
                 <div className="mt-4 flex items-center justify-between rounded-2xl bg-surface-elevated p-2 ring-1 ring-border">
                   <span className="pl-2 text-sm font-medium text-muted-foreground">Tickets</span>
@@ -232,12 +251,14 @@ export function SpotDetailDesktop({
 
                 <button
                   onClick={book}
-                  className="mt-4 w-full rounded-full bg-gradient-brand py-3.5 text-sm font-bold text-primary-foreground shadow-glow transition active:scale-[0.98]"
+                  disabled={optionsLoading}
+                  className="mt-4 w-full rounded-full bg-gradient-brand py-3.5 text-sm font-bold text-primary-foreground shadow-glow transition active:scale-[0.98] disabled:opacity-50"
                 >
                   Book now
                 </button>
 
-                {friendsGoing.length > 0 && (
+                {/* Live split payments are off until TradeSafe wallet settlement is certified. */}
+                {demo && friendsGoing.length > 0 && (
                   <button
                     onClick={() => setSplitOpen(true)}
                     className="mt-2 w-full rounded-full bg-surface-elevated py-3 text-sm font-semibold ring-1 ring-border"

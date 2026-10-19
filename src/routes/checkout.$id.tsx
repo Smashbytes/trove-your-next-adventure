@@ -156,6 +156,7 @@ function CheckoutPage() {
         const { authorizationUrl, bookingId, checkoutExpiresAt } = await initPayment.mutateAsync({
           listingId: spot.id,
           qty: intent.qty,
+          option: intent.option,
           attestedAge: true,
           buyer: { name: fullName, phone, idNumber: idNumber.replace(/\s/g, ""), idType },
           deliveryMethod: delivery,
@@ -179,6 +180,7 @@ function CheckoutPage() {
       const { bookingId } = await createBooking.mutateAsync({
         listingId: spot.id,
         qty: intent.qty,
+        option: intent.option,
         total: intent.total,
         attestedAge: true,
         buyer: { name: fullName, email, phone },
@@ -255,7 +257,10 @@ function CheckoutPage() {
             </div>
           </div>
           <div className="border-t border-border px-4 py-3 text-sm space-y-1.5">
-            <Row label={`${isFree ? "Spots" : "Tickets"} × ${intent.qty}`} value={formatPrice(intent.total)} />
+            <Row
+              label={`${intent.option ? `${intent.option.label} · ` : ""}${isFree ? "Spots" : "Tickets"} × ${intent.qty}`}
+              value={formatPrice(intent.total)}
+            />
             {deliveryFee > 0 && <Row label="WhatsApp delivery" value={formatPrice(deliveryFee)} muted />}
             <div className="border-t border-dashed border-border pt-2">
               <Row label="Total" value={formatPrice(total)} bold />
