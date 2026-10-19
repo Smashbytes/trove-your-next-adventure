@@ -138,7 +138,23 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     lng: row.lng ?? 0,
     tags: meta.tags ?? row.amenities ?? [],
     customQuestions: (row as unknown as { custom_questions?: Spot["customQuestions"] }).custom_questions ?? [],
+    bookingMode: row.booking_mode ?? undefined,
+    rooms: readRooms(meta),
   };
+}
+
+function readRooms(meta: ListingMetadata): Spot["rooms"] {
+  const raw = (meta as { rooms?: unknown }).rooms;
+  if (!Array.isArray(raw)) return undefined;
+  const rooms = raw
+    .filter((r): r is { name: string; capacity?: number; price_kobo?: number } =>
+      !!r && typeof r === "object" && typeof (r as { name?: unknown }).name === "string")
+    .map((r) => ({
+      name: r.name,
+      capacity: typeof r.capacity === "number" ? r.capacity : undefined,
+      price: centsToRand(typeof r.price_kobo === "number" ? r.price_kobo : 0),
+    }));
+  return rooms.length > 0 ? rooms : undefined;
 }
 
 // ---------------------------------------------------------------------------

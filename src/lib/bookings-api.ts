@@ -157,6 +157,22 @@ export interface CreateBookingArgs {
   deliveryMethod?: "email" | "whatsapp";
   termsAccepted?: boolean;
   customAnswers?: Record<string, string>;
+  option?: BookingChoice;
+}
+
+/** The tier / slot / room picked on the spot page; the server prices it. */
+export interface BookingChoice {
+  ticketTypeId?: string;
+  slotId?: string;
+  room?: string;
+}
+
+function choiceBody(option: BookingChoice | undefined) {
+  return {
+    ticket_type_id: option?.ticketTypeId,
+    slot_id: option?.slotId,
+    room: option?.room,
+  };
 }
 
 export function useCreateBooking() {
@@ -183,6 +199,7 @@ export function useCreateBooking() {
       const { data, error } = await supabase.functions.invoke("create-booking", {
         body: {
           listing_id: args.listingId,
+          ...choiceBody(args.option),
           party_size: args.qty,
           attested_age: args.attestedAge ?? false,
           invites: args.invites,
@@ -218,6 +235,7 @@ export interface InitPaymentArgs {
   deliveryMethod?: "email" | "whatsapp";
   termsAccepted?: boolean;
   customAnswers?: Record<string, string>;
+  option?: BookingChoice;
 }
 
 /**
@@ -235,6 +253,7 @@ export function useInitializePayment() {
       const { data, error } = await supabase.functions.invoke("tradesafe-initialize", {
         body: {
           listing_id: args.listingId,
+          ...choiceBody(args.option),
           party_size: args.qty,
           attested_age: args.attestedAge ?? false,
           buyer_name: args.buyer.name,

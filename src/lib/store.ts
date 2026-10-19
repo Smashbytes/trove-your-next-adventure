@@ -39,6 +39,14 @@ export interface CheckoutIntent {
   qty: number;
   total: number;
   split?: { participants: SplitParticipant[]; perPerson: number };
+  /** The tier / slot / room picked on the spot page (sent to the server). */
+  option?: {
+    ticketTypeId?: string;
+    slotId?: string;
+    room?: string;
+    label: string;
+    unitPrice: number;
+  };
 }
 
 export interface PendingPayment {
