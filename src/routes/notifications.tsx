@@ -12,6 +12,7 @@ import {
   type AppNotification,
 } from "@/lib/notifications-api";
 import { useFriends, useRespondFriend } from "@/lib/friends-api";
+import { toastError } from "@/lib/errors";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({ meta: [{ title: "Notifications — TROVE" }] }),
@@ -56,7 +57,7 @@ function NotificationsInner() {
 
   // Mark notifications read on view (friend requests stay actionable).
   useEffect(() => {
-    if (hasUnread) markAll.mutate();
+    if (hasUnread) markAll.mutate(undefined, { onError: toastError("Couldn't mark your notifications as read.") });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUnread]);
 
@@ -99,14 +100,14 @@ function NotificationsInner() {
                 <p className="text-xs text-muted-foreground">sent you a friend request</p>
               </div>
               <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: true })}
+                onClick={() => respond.mutate({ friendId: f.friendId, accept: true }, { onError: toastError("Couldn't accept the request. Try again.") })}
                 className="grid h-9 w-9 place-items-center rounded-full bg-success/20 text-success"
                 aria-label="Accept"
               >
                 <Check className="h-4 w-4" />
               </button>
               <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: false })}
+                onClick={() => respond.mutate({ friendId: f.friendId, accept: false }, { onError: toastError("Couldn't decline the request. Try again.") })}
                 className="grid h-9 w-9 place-items-center rounded-full bg-surface-elevated text-muted-foreground"
                 aria-label="Decline"
               >

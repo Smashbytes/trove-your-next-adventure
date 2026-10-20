@@ -1,7 +1,12 @@
 // Turn raw Supabase / Postgres / network / edge-function errors into copy a
 // guest can act on. The original error is still logged for debugging.
 
+import { toast } from "sonner";
+
 const RULES: Array<[RegExp, string]> = [
+  // supabase.ts gives every request a time limit (GST-L02-08).
+  [/timeouterror|timed out|signal timed out|aborterror|the operation was aborted/i,
+    "TROVE is taking too long to answer. Check your connection and try again."],
   [/failed to fetch|networkerror|network request failed|load failed|failed to send a request/i,
     "We couldn't reach TROVE. Check your connection and try again."],
   [/invalid login credentials/i, "That email and password don't match. Try again or reset your password."],
@@ -47,4 +52,14 @@ export function friendlyError(error: unknown, fallback: string): string {
     return message;
   }
   return fallback;
+}
+
+/**
+ * `onError` for a mutation call: tell the guest it didn't work (GST-L02-07).
+ * Usage: save.mutate(id, { onError: toastError("Couldn't save this spot.") })
+ */
+export function toastError(fallback: string) {
+  return (error: unknown) => {
+    toast.error(friendlyError(error, fallback));
+  };
 }

@@ -78,26 +78,24 @@ function orderedPair(me: string, other: string): { user_a: string; user_b: strin
   return me < other ? { user_a: me, user_b: other } : { user_a: other, user_b: me };
 }
 
-/** Send a friend request by exact email. */
+const ADD_ERRORS: Record<string, string> = {
+  INVALID_EMAIL: "Enter a full email address, e.g. name@example.com.",
+  TOO_MANY_REQUESTS: "You've sent a lot of friend requests today. Try again tomorrow.",
+};
+
+/**
+ * Send a friend request by exact email. The server answers the same way
+ * whether or not the email has a TROVE account (GST-L02-09), so this never
+ * reveals who is on TROVE; the other person decides in their notifications.
+ */
 export function useAddFriend() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  return useMutation<{ name: string }, Error, string>({
+  return useMutation<void, Error, string>({
     mutationFn: async (email) => {
       if (!user) throw new Error("Sign in to add friends.");
-      const { data, error } = await supabase.rpc("find_guest_by_email", { p_email: email });
-      if (error) throw error;
-      const match = (data ?? [])[0];
-      if (!match) throw new Error("No TROVE account found for that email.");
-      const pair = orderedPair(user.id, match.id);
-      const { error: insErr } = await supabase
-        .from("friends")
-        .insert({ ...pair, requested_by: user.id, status: "pending" });
-      if (insErr) {
-        if (insErr.code === "23505") throw new Error("You're already connected (or a request is pending).");
-        throw insErr;
-      }
-      return { name: match.full_name?.trim() || "Friend" };
+      const { error } = await supabase.rpc("send_friend_request_by_email" as never, { p_email: email } as never);
+      if (error) throw new Error(ADD_ERRORS[(error.message ?? "").trim()] ?? error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["friends"] }),
   });

@@ -102,8 +102,8 @@ export function useCreateTicket() {
           title: input.title.trim(),
           description: input.description.trim() || null,
           category: input.category,
-          status: "open",
-          priority: "normal",
+          // status, priority and the ticket number are set by the server
+          // (trove_support_ticket_guard, GST-L02-06).
           related_booking_id: input.relatedBookingId ?? null,
         })
         .select(TICKET_FIELDS)

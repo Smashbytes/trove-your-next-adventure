@@ -9,6 +9,7 @@ import { shareLink } from "@/lib/share";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { NotFoundState } from "@/components/NotFoundState";
+import { toastError } from "@/lib/errors";
 
 export const Route = createFileRoute("/host/$slug")({
   head: () => ({ meta: [{ title: "Spot — TROVE" }] }),
@@ -104,7 +105,7 @@ function HostPage() {
         {/* Actions */}
         <div className="flex gap-2">
           <button
-            onClick={() => (isAuthenticated ? toggleFollow.mutate(host.userId) : openAuthModal())}
+            onClick={() => (isAuthenticated ? toggleFollow.mutate(host.userId, { onError: toastError("Couldn't update who you follow. Try again.") }) : openAuthModal())}
             aria-pressed={following}
             className={`flex-1 rounded-full py-2.5 text-sm font-semibold transition active:scale-[0.98] ${
               following

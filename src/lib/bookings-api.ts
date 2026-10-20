@@ -99,18 +99,29 @@ export function isActiveBooking(status: BookingStatusView): boolean {
   return status === "confirmed" || status === "completed" || status === "partially_refunded";
 }
 
-/** Pull the `{ error }` sentence out of a failed edge-function call. */
-async function edgeError(error: unknown): Promise<Error> {
+/** An edge-function failure: the server's sentence plus its machine `code`. */
+export type EdgeError = Error & { code?: string };
+
+/** Pull the `{ error, code }` out of a failed edge-function call. */
+async function edgeError(error: unknown): Promise<EdgeError> {
   const ctx = (error as { context?: Response }).context;
   let msg = (error as Error)?.message ?? "Something went wrong";
+  let code: string | undefined;
   try {
     if (ctx) {
       const body = await ctx.json();
       if (body?.error) msg = body.error;
+      if (typeof body?.code === "string") code = body.code;
     }
   } catch { /* not JSON */ }
-  return new Error(msg);
+  return Object.assign(new Error(msg), { code });
 }
+
+/** Checkout errors that retrying won't fix: send the guest back to the spot. */
+export const DEAD_END_CHECKOUT_CODES = new Set([
+  "sold_out", "slot_not_available", "tier_not_available", "listing_not_live",
+  "host_unavailable", "seller_escrow_not_ready",
+]);
 
 interface DbBookingRow {
   id: string;

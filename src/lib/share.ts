@@ -38,7 +38,12 @@ export async function fetchSpotOg(id: string): Promise<SpotOg | null> {
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/listings_with_capacity?id=eq.${id}&status=eq.live&select=id,title,city,base_price_kobo,metadata,description`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } },
+      {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        // A slow lookup mustn't hold up the page for a crawler (GST-L02-08).
+        // (Runs in the Cloudflare worker, which has AbortSignal.timeout.)
+        signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(4_000) : undefined,
+      },
     );
     if (!res.ok) return null;
     const [row] = (await res.json()) as Array<{

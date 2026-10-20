@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { HostProfile, Profile } from './database.types';
@@ -83,10 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // A token refresh doesn't change who is signed in; skip the refetch.
         if (event !== 'TOKEN_REFRESHED') {
           setTimeout(() => {
-            if (!cancelled) void fetchProfile(session.user.id);
+            if (!cancelled) void fetchProfile(session.user.id, event === 'USER_UPDATED');
           }, 0);
         }
       } else {
+        profileLoadedFor.current = null;
         setProfile(null);
         setHostProfile(null);
         setIsLoading(false);
@@ -101,7 +102,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  async function fetchProfile(userId: string) {
+  // getSession() and the INITIAL_SESSION / SIGNED_IN events all report the same
+  // user on load; only the first asks for the profile (GST-L02-10). Explicit
+  // refreshes (refreshProfile, USER_UPDATED) pass force.
+  const profileLoadedFor = useRef<string | null>(null);
+
+  async function fetchProfile(userId: string, force = false) {
+    if (!force && profileLoadedFor.current === userId) return;
+    profileLoadedFor.current = userId;
     setIsLoading(true);
     try {
       const { data: p, error: pErr } = await supabase
@@ -113,19 +121,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(p ?? null);
       // The account is the source of truth for onboarding/Settings choices.
       if (p) hydratePrefsFromProfile(p);
-
-      if (p?.is_host) {
-        const { data: hp, error: hpErr } = await supabase
-          .from('host_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (hpErr) console.error('[auth] host_profiles fetch failed:', hpErr);
-        setHostProfile(hp ?? null);
-      } else {
-        setHostProfile(null);
-      }
+      // The guest app never needs the host's private Spot row (payout details
+      // live there); hosts manage it in the Engine.
+      setHostProfile(null);
     } catch (error) {
+      profileLoadedFor.current = null;
       console.error('[auth] fetchProfile threw:', error);
     } finally {
       setIsLoading(false);
@@ -200,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (session) await fetchProfile(session.user.id);
+    if (session) await fetchProfile(session.user.id, true);
   };
 
   return (

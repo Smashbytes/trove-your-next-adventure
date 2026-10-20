@@ -21,7 +21,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { friendlyError } from "@/lib/errors";
+import { friendlyError, toastError } from "@/lib/errors";
 import { useAuth } from "@/lib/auth";
 import { SplitPrompt } from "@/components/SplitPrompt";
 import { useRespondFriend } from "@/lib/friends-api";
@@ -71,7 +71,7 @@ export function NotificationCenter() {
   const close = useCallback(
     (n: AppNotification) => {
       markPopped(n.id);
-      markRead.mutate(n.id);
+      markRead.mutate(n.id, { onError: toastError("Couldn't mark this as read.") });
       setTick((t) => t + 1);
     },
     [markRead],

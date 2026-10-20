@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { friendlyError } from "@/lib/errors";
+import { friendlyError, toastError } from "@/lib/errors";
 import {
   AtSign, Check, ChevronRight, Globe2, Lock, MapPin, Plus, Search,
   UserPlus, Users2, X, Zap,
@@ -484,14 +484,14 @@ function GroupInviteRow({ group }: { group: GroupSummary }) {
         <p className="text-xs text-muted-foreground">You've been invited</p>
       </div>
       <button
-        onClick={() => respond.mutate({ groupId: group.id, accept: true })}
+        onClick={() => respond.mutate({ groupId: group.id, accept: true }, { onError: toastError("Couldn't join the group. Try again.") })}
         className="grid h-8 w-8 place-items-center rounded-full bg-success/20 text-success"
         aria-label="Accept invite"
       >
         <Check className="h-4 w-4" />
       </button>
       <button
-        onClick={() => respond.mutate({ groupId: group.id, accept: false })}
+        onClick={() => respond.mutate({ groupId: group.id, accept: false }, { onError: toastError("Couldn't decline the invite. Try again.") })}
         className="grid h-8 w-8 place-items-center rounded-full bg-surface text-muted-foreground"
         aria-label="Decline invite"
       >
@@ -616,7 +616,7 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
       <div className="flex gap-2 pt-1">
         {!isOwner && (
           <button
-            onClick={() => leave.mutate({ groupId: group.id })}
+            onClick={() => leave.mutate({ groupId: group.id }, { onError: toastError("Couldn't leave the group. Try again.") })}
             className="text-2xs text-muted-foreground transition hover:text-destructive"
           >
             Leave group

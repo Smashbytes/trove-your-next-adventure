@@ -5,8 +5,8 @@
 // Read sources (all publicly readable per RLS):
 //   - listings_with_capacity (view): listing fields + capacity_booked
 //   - categories: id → display name + parent
-//   - host_profiles: user_id → public slug
-//   - reviews: aggregated rating/count per listing
+//   - public_host_profiles: user_id → slug + display name
+//   - rating_avg / review_count come aggregated from the view (0037)
 //
 // Known gaps flagged for follow-up:
 //   * Host DISPLAY NAME is not publicly readable (profiles RLS is own-only and
@@ -35,6 +35,16 @@ export const FALLBACK_IMAGE = fallbackImage;
 
 /** Curated "Featured" slots live this long before they reset (reels-style). */
 export const FEATURED_TTL_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * What the guest app reads from listings_with_capacity — named columns, never
+ * `*`, so internal fields (search_tsv, compliance, health_score…) stay off the
+ * wire (GST-L02-10).
+ */
+const LISTING_COLUMNS =
+  "id, host_id, category_id, title, description, status, booking_mode, base_price_kobo, capacity, " +
+  "lat, lng, address, city, amenities, cover_url, metadata, created_at, listing_type, capacity_booked, " +
+  "custom_questions, refund_policy, rating_avg, review_count, cancelled_at";
 
 // ---------------------------------------------------------------------------
 // Demo mode
@@ -91,7 +101,6 @@ interface ListingExtras {
   categories: Map<string, CategoryNode>;
   hostSlugById: Map<string, string>;
   hostNameById?: Map<string, string>;
-  ratingByListing: Map<string, { avg: number; count: number }>;
   nextSlotByListing?: Map<string, string>;
 }
 
@@ -100,7 +109,8 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
   const meta = (row.metadata ?? {}) as ListingMetadata;
   const cat = row.category_id ? extras.categories.get(row.category_id) : undefined;
   const parent = cat?.parentId ? extras.categories.get(cat.parentId) : undefined;
-  const rating = extras.ratingByListing.get(row.id);
+  // Aggregated by the database (GST-L02-11), not averaged here from review rows.
+  const agg = row as unknown as { rating_avg?: number | null; review_count?: number | null };
   const hostSlug = extras.hostSlugById.get(row.host_id) ?? "";
   const hostName = extras.hostNameById?.get(row.host_id) || prettifySlug(hostSlug);
 
@@ -122,8 +132,8 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     date,
     doors: (meta as { doors_open?: string }).doors_open ?? "",
     price: centsToRand(row.base_price_kobo),
-    rating: rating ? Math.round(rating.avg * 10) / 10 : 0,
-    reviews: rating?.count ?? 0,
+    rating: agg.rating_avg != null ? Math.round(Number(agg.rating_avg) * 10) / 10 : 0,
+    reviews: Number(agg.review_count ?? 0),
     image: row.cover_url || FALLBACK_IMAGE,
     imageFallback: FALLBACK_IMAGE,
     capacityBooked: row.capacity_booked ?? 0,
@@ -177,17 +187,14 @@ async function fetchCategories(): Promise<Map<string, CategoryNode>> {
 
 async function enrichListings(rows: ListingWithCapacity[]): Promise<Spot[]> {
   if (rows.length === 0) return [];
-  const listingIds = rows.map((r) => r.id);
   const hostIds = [...new Set(rows.map((r) => r.host_id))];
 
-  const [categories, hostsRes, reviewsRes] = await Promise.all([
+  const [categories, hostsRes] = await Promise.all([
     fetchCategories(),
     supabase.from("public_host_profiles").select("user_id, slug, display_name").in("user_id", hostIds),
-    supabase.from("reviews").select("of_listing, rating").in("of_listing", listingIds),
   ]);
 
   if (hostsRes.error) throw hostsRes.error;
-  if (reviewsRes.error) throw reviewsRes.error;
 
   const hostSlugById = new Map<string, string>();
   const hostNameById = new Map<string, string>();
@@ -196,20 +203,7 @@ async function enrichListings(rows: ListingWithCapacity[]): Promise<Spot[]> {
     if (h.display_name) hostNameById.set(h.user_id, h.display_name);
   }
 
-  const agg = new Map<string, { sum: number; count: number }>();
-  for (const r of (reviewsRes.data ?? []) as { of_listing: string | null; rating: number }[]) {
-    if (!r.of_listing) continue;
-    const cur = agg.get(r.of_listing) ?? { sum: 0, count: 0 };
-    cur.sum += r.rating;
-    cur.count += 1;
-    agg.set(r.of_listing, cur);
-  }
-  const ratingByListing = new Map<string, { avg: number; count: number }>();
-  for (const [id, { sum, count }] of agg) {
-    ratingByListing.set(id, { avg: count ? sum / count : 0, count });
-  }
-
-  return rows.map((row) => listingToSpot(row, { categories, hostSlugById, hostNameById, ratingByListing }));
+  return rows.map((row) => listingToSpot(row, { categories, hostSlugById, hostNameById }));
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +281,7 @@ export function useListings(filters: ListingFilters = {}) {
 
       let q = supabase
         .from("listings_with_capacity")
-        .select("*")
+        .select(LISTING_COLUMNS)
         .eq("status", "live")
         .order("created_at", { ascending: false })
         .limit(filters.limit ?? 60);
@@ -306,7 +300,7 @@ export function useListings(filters: ListingFilters = {}) {
 
       const { data, error } = await q;
       if (error) throw error;
-      const rows = (data ?? []) as ListingWithCapacity[];
+      const rows = (data ?? []) as unknown as ListingWithCapacity[];
       const spots = await enrichListings(rows);
 
       // Category filter applied post-enrichment (matches resolved display name).
@@ -330,13 +324,13 @@ export function useListing(id: string | undefined) {
       if (!UUID_RE.test(id!)) return null;
       const { data, error } = await supabase
         .from("listings_with_capacity")
-        .select("*")
+        .select(LISTING_COLUMNS)
         .eq("id", id!)
         .eq("status", "live")
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const [spot] = await enrichListings([data as ListingWithCapacity]);
+      const [spot] = await enrichListings([data as unknown as ListingWithCapacity]);
       return spot ?? null;
     },
   });
@@ -360,10 +354,10 @@ export async function loadSpotsByIds(ids: string[], demo: boolean): Promise<Map<
   }
   const { data, error } = await supabase
     .from("listings_with_capacity")
-    .select("*")
+    .select(LISTING_COLUMNS)
     .in("id", ids);
   if (error) throw error;
-  const spots = await enrichListings((data ?? []) as ListingWithCapacity[]);
+  const spots = await enrichListings((data ?? []) as unknown as ListingWithCapacity[]);
   for (const s of spots) map.set(s.id, s);
   return map;
 }
@@ -386,7 +380,6 @@ export interface ListingReview {
   rating: number;
   body: string | null;
   created_at: string;
-  by_user: string;
 }
 
 export function useListingReviews(listingId: string | undefined) {
@@ -398,7 +391,7 @@ export function useListingReviews(listingId: string | undefined) {
       if (demo || !UUID_RE.test(listingId!)) return [];
       const { data, error } = await supabase
         .from("reviews")
-        .select("id, rating, body, created_at, by_user")
+        .select("id, rating, body, created_at")
         .eq("of_listing", listingId!)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -488,13 +481,13 @@ export function useHostBySlug(slug: string | undefined) {
 
       const { data: listings, error: lErr } = await supabase
         .from("listings_with_capacity")
-        .select("*")
+        .select(LISTING_COLUMNS)
         .eq("host_id", host.user_id)
         .eq("status", "live")
         .order("created_at", { ascending: false });
       if (lErr) throw lErr;
 
-      const spots = await enrichListings((listings ?? []) as ListingWithCapacity[]);
+      const spots = await enrichListings((listings ?? []) as unknown as ListingWithCapacity[]);
       return {
         slug: host.slug,
         userId: host.user_id,

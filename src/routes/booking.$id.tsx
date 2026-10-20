@@ -312,9 +312,10 @@ function BookingPage() {
       {/* Actions */}
       {isActive && !eventOver && (
         <div className="mt-6 space-y-2">
-          <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-success/15 py-3 text-sm font-semibold text-success">
-            <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp
-          </button>
+          {/* No reminder is sent yet, so don't say one was (GST-L02-12). */}
+          <p className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface py-2.5 text-xs text-muted-foreground ring-1 ring-border">
+            <MessageCircle className="h-3.5 w-3.5" aria-hidden /> WhatsApp reminders are coming soon
+          </p>
           {booking.status === "confirmed" && (booking.total > 0 && !demo
             ? <RefundPanel booking={booking} policy={spot.refundPolicy} />
             : <CancelPanel booking={booking} />)}
