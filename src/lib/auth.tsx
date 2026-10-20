@@ -1,8 +1,27 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { HostProfile, Profile } from './database.types';
 import { hydratePrefsFromProfile } from './guest-prefs';
+
+// One profile request per signed-in user for the whole page (module scope, so
+// it survives the provider remounting during hydration).
+let profileRequest: { userId: string; promise: Promise<Profile | null> } | null = null;
+
+function loadProfileOnce(userId: string, force: boolean): Promise<Profile | null> {
+  if (!force && profileRequest?.userId === userId) return profileRequest.promise;
+  const request = { userId, promise: Promise.resolve<Profile | null>(null) };
+  request.promise = (async () => {
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    if (error) {
+      console.error('[auth] profiles fetch failed:', error);
+      if (profileRequest === request) profileRequest = null; // let the next call retry
+    }
+    return (data ?? null) as Profile | null;
+  })();
+  profileRequest = request;
+  return request.promise;
+}
 
 // ---------------------------------------------------------------------------
 // Context
@@ -87,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         }
       } else {
-        profileLoadedFor.current = null;
+        profileRequest = null;
         setProfile(null);
         setHostProfile(null);
         setIsLoading(false);
@@ -103,29 +122,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // getSession() and the INITIAL_SESSION / SIGNED_IN events all report the same
-  // user on load; only the first asks for the profile (GST-L02-10). Explicit
-  // refreshes (refreshProfile, USER_UPDATED) pass force.
-  const profileLoadedFor = useRef<string | null>(null);
-
+  // user on load, and the provider can mount twice while the page hydrates:
+  // they all share one request per user (GST-L02-10). Explicit refreshes
+  // (refreshProfile, USER_UPDATED) pass force.
   async function fetchProfile(userId: string, force = false) {
-    if (!force && profileLoadedFor.current === userId) return;
-    profileLoadedFor.current = userId;
     setIsLoading(true);
     try {
-      const { data: p, error: pErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-      if (pErr) console.error('[auth] profiles fetch failed:', pErr);
-      setProfile(p ?? null);
+      const p = await loadProfileOnce(userId, force);
+      setProfile(p);
       // The account is the source of truth for onboarding/Settings choices.
       if (p) hydratePrefsFromProfile(p);
       // The guest app never needs the host's private Spot row (payout details
       // live there); hosts manage it in the Engine.
       setHostProfile(null);
     } catch (error) {
-      profileLoadedFor.current = null;
       console.error('[auth] fetchProfile threw:', error);
     } finally {
       setIsLoading(false);
