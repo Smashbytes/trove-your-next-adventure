@@ -107,6 +107,11 @@ async function edgeError(error: unknown): Promise<EdgeError> {
   const ctx = (error as { context?: Response }).context;
   let msg = (error as Error)?.message ?? "Something went wrong";
   let code: string | undefined;
+  // A request our client gave up on (supabase.ts time limit) arrives wrapped
+  // as "Failed to send a request"; say what actually happened.
+  if ((ctx as unknown as { name?: string } | undefined)?.name === "TimeoutError") {
+    return Object.assign(new Error("The request timed out."), { code: "timeout" });
+  }
   try {
     if (ctx) {
       const body = await ctx.json();
