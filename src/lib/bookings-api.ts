@@ -1,4 +1,4 @@
-// Bookings — unified view-model over the demo (localStorage) flow and the live
+// Bookings â€” unified view-model over the demo (localStorage) flow and the live
 // (Supabase edge function) flow, so the ticket/booking UI speaks one shape.
 //
 //   - demo account: existing mock store (localStorage), full split-bill flow
@@ -47,6 +47,13 @@ export interface BookingView {
   buyer?: { name: string; email: string; phone: string };
   paymentRef?: string;
   split?: { participants: SplitParticipant[]; perPerson: number };
+  /** Who called it off: the guest (refund policy) or the host (full refund). */
+  cancelledBy?: "guest" | "host" | "trove";
+  cancelReason?: string;
+  /** TROVE's booking fee in rand (part of `total`). */
+  bookingFee?: number;
+  /** Money already returned to the guest, in rand. */
+  refunded?: number;
 }
 
 function mockToView(b: MockBooking, spot: Spot | null): BookingView {
@@ -112,7 +119,11 @@ interface DbBookingRow {
   total_kobo: number;
   status: string;
   created_at: string;
+  booking_fee_kobo: number | null;
+  cancelled_by: "guest" | "host" | "trove" | null;
+  cancel_reason: string | null;
   tickets: { code: string }[] | null;
+  refunds: { amount_kobo: number; status: string }[] | null;
 }
 
 async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
@@ -124,12 +135,19 @@ async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
     qty: r.party_size,
     total: koboToRand(r.total_kobo),
     status: dbStatusToView(r.status),
-    ticketCode: r.tickets?.[0]?.code ?? "—",
+    ticketCode: r.tickets?.[0]?.code ?? "â€”",
     createdAt: r.created_at,
+    cancelledBy: r.cancelled_by ?? undefined,
+    cancelReason: r.cancel_reason ?? undefined,
+    bookingFee: koboToRand(r.booking_fee_kobo ?? 0),
+    refunded: koboToRand(
+      (r.refunds ?? []).filter((x) => x.status === "succeeded").reduce((s, x) => s + x.amount_kobo, 0),
+    ),
   }));
 }
 
-const BOOKING_SELECT = "id, listing_id, party_size, total_kobo, status, created_at, tickets(code)";
+const BOOKING_SELECT =
+  "id, listing_id, party_size, total_kobo, booking_fee_kobo, status, created_at, cancelled_by, cancel_reason, tickets(code), refunds(amount_kobo, status)";
 
 export function useMyBookings() {
   const demo = useIsDemo();
@@ -148,7 +166,7 @@ export function useMyBookings() {
         .eq("guest_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return loadLiveBookings((data ?? []) as DbBookingRow[]);
+      return loadLiveBookings((data ?? []) as unknown as DbBookingRow[]);
     },
   });
 }
@@ -177,7 +195,7 @@ export function useBooking(id: string | undefined) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const [view] = await loadLiveBookings([data as DbBookingRow]);
+      const [view] = await loadLiveBookings([data as unknown as DbBookingRow]);
       return view ?? null;
     },
   });
@@ -324,10 +342,58 @@ export function useCancelBooking() {
 }
 
 // ---------------------------------------------------------------------------
-// Refund requests (paid bookings). request_refund() checks the host's policy,
-// that the money is still in TradeSafe escrow, and puts the ticket on hold;
-// TROVE then approves (TradeSafe returns the money) or declines.
+// Refund requests (paid bookings). request_refund() applies the listing's
+// refund policy (migration 0038: % of the ticket price; the booking fee is
+// never refunded), checks the money is still in TradeSafe escrow and puts the
+// ticket on hold; TROVE then approves (TradeSafe returns the money) or declines.
 // ---------------------------------------------------------------------------
+
+export interface RefundQuote {
+  policy: string;
+  percent: number;
+  amountKobo: number;
+  paidKobo: number;
+  bookingFeeKobo: number;
+  nextChangeAt: string | null;
+  nextPercent: number | null;
+}
+
+/** What the guest would get back if they cancelled now (server-calculated). */
+export function useRefundQuote(bookingId: string | undefined, enabled = true) {
+  return useQuery<RefundQuote>({
+    queryKey: ["refund-quote", bookingId],
+    enabled: enabled && !!bookingId,
+    // Tiers change with time; don't show a stale amount.
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("refund_quote" as never, { p_booking_id: bookingId } as never);
+      if (error) throw rpcError(error);
+      const q = data as unknown as Record<string, unknown>;
+      return {
+        policy: String(q.policy ?? "standard"),
+        percent: Number(q.percent ?? 0),
+        amountKobo: Number(q.amount_kobo ?? 0),
+        paidKobo: Number(q.paid_kobo ?? 0),
+        bookingFeeKobo: Number(q.booking_fee_kobo ?? 0),
+        nextChangeAt: (q.next_change_at as string | null) ?? null,
+        nextPercent: q.next_percent == null ? null : Number(q.next_percent),
+      };
+    },
+  });
+}
+
+/** TROVE's booking fee (rand) added to paid checkouts; the server charges it. */
+export function useCheckoutFees() {
+  return useQuery<{ bookingFee: number }>({
+    queryKey: ["checkout-fees"],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("checkout_fees" as never);
+      if (error) throw error;
+      return { bookingFee: koboToRand(Number((data as unknown as { booking_fee_kobo?: number })?.booking_fee_kobo ?? 0)) };
+    },
+  });
+}
 
 const REFUND_ERRORS: Record<string, string> = {
   NO_REFUNDS: "This event doesn't offer refunds.",
@@ -356,6 +422,7 @@ export function useRequestRefund() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking"] });
+      qc.invalidateQueries({ queryKey: ["refund-quote"] });
     },
   });
 }
@@ -374,22 +441,18 @@ export function useWithdrawRefund() {
   });
 }
 
-/** Days before the event that refunds close, by listings.refund_policy. */
-const POLICY_DAYS: Record<string, number> = { "1d": 1, "7d": 7, "30d": 30 };
-
+/** The listing's refund policy in one line (listings.refund_policy, 0038). */
 export function refundPolicyText(policy: string | undefined): string {
-  if (policy === "none") return "No refunds";
-  const days = POLICY_DAYS[policy ?? "7d"] ?? 7;
-  return `Refunds up to ${days} day${days === 1 ? "" : "s"} before the event`;
-}
-
-/** When the guest can no longer ask for a refund (null = no refunds at all). */
-export function refundDeadline(policy: string | undefined, eventDate: string | undefined): Date | null {
-  if (policy === "none") return null;
-  const days = POLICY_DAYS[policy ?? "7d"] ?? 7;
-  const start = eventDate ? new Date(eventDate).getTime() : NaN;
-  if (Number.isNaN(start)) return null;
-  return new Date(start - days * 86_400_000);
+  switch (policy) {
+    case "none":
+      return "No refunds if you cancel";
+    case "7d":
+      return "90% back if you cancel 7+ days before";
+    case "30d":
+      return "90% back if you cancel 30+ days before";
+    default:
+      return "90% back if you cancel 72+ hours before, 50% at 24â€“72 hours";
+  }
 }
 
 /** Demo-only split "mark paid" (mutates localStorage, then refreshes the view). */

@@ -8,8 +8,8 @@ import {
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
 import {
-  isActiveBooking, refundDeadline, refundPolicyText, useBooking, useCancelBooking, useMarkSplitPaid,
-  useRequestRefund, useWithdrawRefund, type BookingView,
+  isActiveBooking, refundPolicyText, useBooking, useCancelBooking, useMarkSplitPaid,
+  useRefundQuote, useRequestRefund, useWithdrawRefund, type BookingView,
 } from "@/lib/bookings-api";
 import { useIsDemo } from "@/lib/listings-api";
 import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
@@ -27,6 +27,23 @@ type Tone = "success" | "warning" | "danger" | "neutral";
 /** What the guest is told for each booking state (never "You're in" unless it's true). */
 function statusCopy(b: BookingView): { tone: Tone; title: string; body: string; ticketNote: string; spin?: boolean } {
   const amount = formatPrice(b.total);
+  const why = b.cancelReason ? ` Reason: ${b.cancelReason.replace(/\.$/, "")}.` : "";
+  // The host called it off: always a full refund, booking fee included.
+  if (b.cancelledBy === "host") {
+    if (b.status === "refunded") {
+      return { tone: "neutral", title: "Event cancelled", body: `The host cancelled this event.${why} ${amount} was refunded to your original payment method.`, ticketNote: "Event cancelled · refunded in full" };
+    }
+    if (b.status === "cancelled") {
+      return { tone: "danger", title: "Event cancelled", body: `The host cancelled this event.${why}`, ticketNote: "Event cancelled" };
+    }
+    return { tone: "warning", title: "Event cancelled", body: `The host cancelled this event.${why} Your full payment of ${amount}, booking fee included, is being refunded to your original payment method. Allow 3–5 working days.`, ticketNote: "Event cancelled · full refund on its way" };
+  }
+  // The guest cancelled under the refund policy.
+  if (b.cancelledBy === "guest" && b.status === "cancelled") {
+    return b.refunded
+      ? { tone: "neutral", title: "Cancelled", body: `You cancelled this booking. ${formatPrice(b.refunded)} was refunded under the event's refund policy.`, ticketNote: "Ticket cancelled · refunded" }
+      : { tone: "danger", title: "Cancelled", body: "You cancelled this booking.", ticketNote: "Ticket cancelled" };
+  }
   switch (b.status) {
     case "confirmed":
     case "completed":
@@ -36,10 +53,10 @@ function statusCopy(b: BookingView): { tone: Tone; title: string; body: string; 
     case "pending":
       return { tone: "warning", title: "Confirming payment…", body: "This updates automatically once TradeSafe confirms your payment.", ticketNote: "Awaiting payment confirmation…", spin: true };
     case "refund_requested":
-      return { tone: "warning", title: "Refund requested", body: "Your ticket is on hold while TROVE reviews your request. We'll let you know.", ticketNote: "On hold · refund requested" };
+      return { tone: "warning", title: "Cancellation requested", body: "Your ticket is on hold while TROVE processes your refund. We'll let you know.", ticketNote: "On hold · cancellation requested" };
     case "refund_processing":
     case "refund_pending":
-      return { tone: "warning", title: "Refund on its way", body: `TradeSafe is returning ${amount} to your original payment method. Allow 3–5 working days.`, ticketNote: "Ticket cancelled · refund processing" };
+      return { tone: "warning", title: "Refund on its way", body: "TradeSafe is returning your refund to your original payment method. Allow 3–5 working days.", ticketNote: "Ticket cancelled · refund processing" };
     case "refunded":
       return { tone: "neutral", title: "Refunded", body: `${amount} was returned to your original payment method.`, ticketNote: "Ticket cancelled · refunded" };
     case "cancelled":
@@ -299,12 +316,12 @@ function BookingPage() {
             <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp
           </button>
           {booking.status === "confirmed" && (booking.total > 0 && !demo
-            ? <RefundPanel booking={booking} policy={spot.refundPolicy} eventDate={spot.date} />
+            ? <RefundPanel booking={booking} policy={spot.refundPolicy} />
             : <CancelPanel booking={booking} />)}
         </div>
       )}
 
-      {booking.status === "refund_requested" && <WithdrawPanel bookingId={booking.id} />}
+      {booking.status === "refund_requested" && booking.cancelledBy !== "host" && <WithdrawPanel bookingId={booking.id} />}
 
       {/* Review: only after the experience (the server checks this too) */}
       {isActive && !demo && eventOver && <ReviewPanel bookingId={booking.id} listingId={booking.listingId} />}
@@ -366,26 +383,41 @@ function CancelPanel({ booking }: { booking: BookingView }) {
   );
 }
 
-/** Paid bookings: ask for a refund within the host's policy (request_refund). */
-function RefundPanel({ booking, policy, eventDate }: { booking: BookingView; policy?: string; eventDate: string }) {
+const sast = (iso: string) =>
+  new Intl.DateTimeFormat("en-ZA", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Johannesburg" }).format(new Date(iso));
+
+/** Paid bookings: cancel for a refund under the listing's policy (request_refund). */
+function RefundPanel({ booking, policy }: { booking: BookingView; policy?: string }) {
   const request = useRequestRefund();
+  const quote = useRefundQuote(booking.id);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
-  const deadline = refundDeadline(policy, eventDate);
-  const allowed = policy !== "none" && (!deadline || deadline.getTime() > Date.now());
-  const until = deadline
-    ? new Intl.DateTimeFormat("en-ZA", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Johannesburg" }).format(deadline)
-    : null;
+  const q = quote.data;
 
-  if (!allowed) {
+  if (quote.isLoading) {
+    return <p className="text-center text-2xs text-muted-foreground" role="status">Checking your refund options…</p>;
+  }
+  if (quote.isError || !q) {
+    return (
+      <Panel>
+        <p className="text-2xs text-muted-foreground">We couldn't load your refund options.</p>
+        <button onClick={() => quote.refetch()} className="text-xs font-semibold underline">Try again</button>
+      </Panel>
+    );
+  }
+
+  const refund = formatPrice(q.amountKobo / 100);
+  const fee = q.bookingFeeKobo > 0 ? formatPrice(q.bookingFeeKobo / 100) : null;
+
+  if (q.percent === 0) {
     return (
       <Panel>
         <p className="text-sm font-semibold">{refundPolicyText(policy)}</p>
         <p className="text-2xs text-muted-foreground">
-          {policy === "none"
-            ? "The host doesn't offer refunds for this event."
-            : `The refund window closed on ${until}.`}{" "}
-          If something's gone wrong, our support team can help.
+          {q.policy === "none"
+            ? "This event doesn't offer refunds if you cancel."
+            : "It's too close to the event for a refund now."}{" "}
+          If the host cancels, you'll get everything back. If something's gone wrong, our support team can help.
         </p>
         <Link to="/support" className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground underline">
           <LifeBuoy className="h-3.5 w-3.5" /> Contact support
@@ -400,17 +432,19 @@ function RefundPanel({ booking, policy, eventDate }: { booking: BookingView; pol
         onClick={() => setOpen(true)}
         className="w-full rounded-full bg-surface ring-1 ring-border py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition"
       >
-        Request a refund
+        Cancel for a {refund} refund
       </button>
     );
   }
 
   return (
     <Panel>
-      <p className="text-sm font-semibold">Request a refund of {formatPrice(booking.total)}</p>
+      <p className="text-sm font-semibold">Cancel and get {refund} back?</p>
       <p className="text-2xs text-muted-foreground">
-        {refundPolicyText(policy)}{until ? ` (until ${until})` : ""}. Your ticket goes on hold while TROVE checks your request;
-        once approved, TradeSafe returns the money to your original payment method.
+        That's {q.percent}% of the ticket price under this event's refund policy
+        {fee ? `; the ${fee} booking fee isn't refundable` : ""}.
+        {q.nextChangeAt ? ` After ${sast(q.nextChangeAt)} it drops to ${q.nextPercent === 0 ? "no refund" : `${q.nextPercent}%`}.` : ""}{" "}
+        Your ticket goes on hold while TROVE processes it, then TradeSafe returns the money to your original payment method.
       </p>
       <label className="block">
         <span className="sr-only">Reason (optional)</span>
@@ -431,13 +465,13 @@ function RefundPanel({ booking, policy, eventDate }: { booking: BookingView; pol
           disabled={request.isPending}
           onClick={() =>
             request.mutate({ bookingId: booking.id, reason }, {
-              onSuccess: () => { setOpen(false); toast.success("Refund requested. We'll let you know."); },
-              onError: (e) => toast.error(friendlyError(e, "We couldn't send your refund request. Try again.")),
+              onSuccess: () => { setOpen(false); toast.success("Cancellation requested. We'll let you know."); },
+              onError: (e) => toast.error(friendlyError(e, "We couldn't send your request. Try again.")),
             })
           }
-          className="flex-1 rounded-full bg-gradient-brand py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-50"
         >
-          {request.isPending ? "Sending…" : "Send request"}
+          {request.isPending ? "Sending…" : "Cancel booking"}
         </button>
       </div>
     </Panel>
