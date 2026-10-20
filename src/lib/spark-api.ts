@@ -25,6 +25,8 @@ async function invokeEdge<T>(fn: string, body: Record<string, unknown>): Promise
   if (error) {
     const ctx = (error as { context?: Response }).context;
     let msg = error.message;
+    // Timed out by our client (supabase.ts): don't call it a network failure.
+    if ((ctx as unknown as { name?: string } | undefined)?.name === "TimeoutError") throw new Error("The request timed out.");
     try {
       if (ctx) {
         const parsed = await ctx.json();
