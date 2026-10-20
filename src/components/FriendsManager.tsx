@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { friendlyError } from "@/lib/errors";
+import { friendlyError, toastError } from "@/lib/errors";
 import { UserPlus, Check, X } from "lucide-react";
 import {
   useFriends,
@@ -25,8 +25,8 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
     const value = email.trim();
     if (!value) return;
     try {
-      const { name } = await addFriend.mutateAsync(value);
-      toast.success(`Friend request sent to ${name}.`);
+      await addFriend.mutateAsync(value);
+      toast.success("If that email is on TROVE, they'll get your friend request.");
       setEmail("");
     } catch (e) {
       toast.error(friendlyError(e, "Couldn't send request."));
@@ -70,14 +70,14 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
               <Avatar name={f.name} url={f.avatarUrl} />
               <p className="flex-1 truncate text-sm font-medium">{f.name}</p>
               <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: true })}
+                onClick={() => respond.mutate({ friendId: f.friendId, accept: true }, { onError: toastError("Couldn't accept the request. Try again.") })}
                 className="grid h-8 w-8 place-items-center rounded-full bg-success/20 text-success"
                 aria-label="Accept"
               >
                 <Check className="h-4 w-4" />
               </button>
               <button
-                onClick={() => respond.mutate({ friendId: f.friendId, accept: false })}
+                onClick={() => respond.mutate({ friendId: f.friendId, accept: false }, { onError: toastError("Couldn't decline the request. Try again.") })}
                 className="grid h-8 w-8 place-items-center rounded-full bg-surface text-muted-foreground"
                 aria-label="Decline"
               >
@@ -96,7 +96,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
               <Avatar name={f.name} url={f.avatarUrl} />
               <p className="flex-1 truncate text-sm font-medium">{f.name}</p>
               <button
-                onClick={() => remove.mutate(f.friendId)}
+                onClick={() => remove.mutate(f.friendId, { onError: toastError("Couldn't remove this friend. Try again.") })}
                 className="text-2xs text-muted-foreground transition hover:text-destructive"
               >
                 Remove

@@ -4,7 +4,7 @@ import { ArrowLeft, Heart, Share2, Star, Clock, MapPin, Send, Users2, X, Check, 
 import { toast } from "sonner";
 import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { NotFoundState } from "@/components/NotFoundState";
-import { friendlyError } from "@/lib/errors";
+import { friendlyError, toastError } from "@/lib/errors";
 import { FriendStack } from "@/components/FriendStack";
 import { SpotDetailDesktop } from "@/components/desktop/SpotDetailDesktop";
 import { openDirections } from "@/lib/maps";
@@ -208,7 +208,7 @@ function SpotPage() {
               <Share2 className="h-4 w-4" />
             </button>
             <button
-              onClick={() => (isAuthenticated ? toggleSave.mutate(spot.id) : openAuthModal())}
+              onClick={() => (isAuthenticated ? toggleSave.mutate(spot.id, { onError: toastError("Couldn't update your saved spots. Try again.") }) : openAuthModal())}
               aria-label={saved ? "Remove from saved" : "Save"}
               aria-pressed={saved}
               className="grid h-10 w-10 place-items-center rounded-full glass-strong"

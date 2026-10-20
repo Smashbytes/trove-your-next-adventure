@@ -7,7 +7,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { formatPrice, formatDate, formatTime } from "@/lib/format";
 import { useIsDemo, useListing } from "@/lib/listings-api";
-import { refundPolicyText, useCheckoutFees, useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
+import {
+  DEAD_END_CHECKOUT_CODES, refundPolicyText, useCheckoutFees, useCreateBooking, useInitializePayment, type EdgeError,
+} from "@/lib/bookings-api";
 import { clearCheckoutIntent, getCheckoutIntent, setPendingPayment, type CheckoutIntent } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { friendlyError } from "@/lib/errors";
@@ -63,6 +65,7 @@ function CheckoutPage() {
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     const i = getCheckoutIntent();
@@ -200,6 +203,7 @@ function CheckoutPage() {
       navigate({ to: "/booking/$id", params: { id: bookingId } });
     } catch (e) {
       setErrorMsg(friendlyError(e, "We couldn't complete your booking. Nothing was charged."));
+      setErrorCode((e as EdgeError).code ?? null);
       setStep("failed");
     }
   }
@@ -304,8 +308,17 @@ function CheckoutPage() {
                   <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Dlamini" autoComplete="family-name" maxLength={60} className={fieldInputCls} />
                 </Field>
               </div>
-              <Field label="Email" error={errors.email}>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" inputMode="email" placeholder="you@email.com" autoComplete="email" maxLength={254} className={fieldInputCls} />
+              {/* Tickets go to the account's email (create-booking / TradeSafe use it), so
+                  real accounts see it read-only instead of a field that changes nothing. */}
+              <Field label={demo ? "Email" : "Tickets go to"} error={errors.email}>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  readOnly={!demo && !!user?.email}
+                  aria-readonly={!demo && !!user?.email}
+                  type="email" inputMode="email" placeholder="you@email.com" autoComplete="email" maxLength={254}
+                  className={`${fieldInputCls} ${!demo && user?.email ? "opacity-80" : ""}`}
+                />
               </Field>
               <Field label="Mobile (WhatsApp)" error={errors.phone}>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="071 234 5678" autoComplete="tel" maxLength={20} className={fieldInputCls} />
@@ -502,13 +515,24 @@ function CheckoutPage() {
                 <p className="mt-3 font-display text-lg">{isFree ? "Booking failed" : "Payment failed"}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{errorMsg ?? "Something went wrong."}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setStep(isFree ? "details" : "payment")}
-                className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
-              >
-                Try again
-              </button>
+              {errorCode && DEAD_END_CHECKOUT_CODES.has(errorCode) ? (
+                // Retrying can't fix sold out / gone / paused: pick something else.
+                <Link
+                  to="/spot/$id"
+                  params={{ id: spot.id }}
+                  className="block w-full rounded-full bg-gradient-brand py-3 text-center text-sm font-semibold text-primary-foreground shadow-glow"
+                >
+                  {errorCode === "slot_not_available" || errorCode === "tier_not_available" ? "Pick another option" : "Back to the spot"}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setStep(isFree ? "details" : "payment")}
+                  className="w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+                >
+                  Try again
+                </button>
+              )}
             </motion.section>
           )}
         </AnimatePresence>

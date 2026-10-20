@@ -27,6 +27,7 @@ import type { Friend } from "@/lib/spots";
 import { useIsDemo } from "@/lib/listings-api";
 import { toSelected, useBookingOptions, type BookingOption } from "@/lib/booking-options";
 import { BookingOptionPicker } from "@/components/BookingOptionPicker";
+import { toastError } from "@/lib/errors";
 
 export function SpotDetailDesktop({
   spot,
@@ -123,7 +124,7 @@ export function SpotDetailDesktop({
                     <Share2 className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => toggleSave.mutate(spot.id)}
+                    onClick={() => toggleSave.mutate(spot.id, { onError: toastError("Couldn't update your saved spots. Try again.") })}
                     aria-label="Save"
                     className="grid h-10 w-10 place-items-center rounded-full glass-strong transition hover:scale-105"
                   >

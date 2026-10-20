@@ -9,7 +9,7 @@ import { useFollowedHosts, useToggleFollow } from "@/lib/social";
 import { CATEGORIES, CITIES } from "@/lib/format";
 import { getGuestPrefs, saveGuestPrefs, type GuestPrefs } from "@/lib/guest-prefs";
 import { isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
-import { friendlyError } from "@/lib/errors";
+import { friendlyError, toastError } from "@/lib/errors";
 import { useTopLevelCategories } from "@/lib/listings-api";
 import {
   normalizeUsername,
@@ -352,7 +352,7 @@ function MySpots() {
               </Link>
               <button
                 type="button"
-                onClick={() => toggleFollow.mutate(h.userId)}
+                onClick={() => toggleFollow.mutate(h.userId, { onError: toastError("Couldn't update who you follow. Try again.") })}
                 aria-label={`Unfollow ${h.name}`}
                 className="px-2 py-2 text-xs text-muted-foreground transition hover:text-destructive"
               >
