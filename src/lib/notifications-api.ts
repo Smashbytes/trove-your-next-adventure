@@ -354,6 +354,21 @@ const CATALOGUE: Record<string, NotificationSpec> = {
     sticky: true,
   },
   refund_processed: { title: "Refund on its way", icon: RotateCcw, tone: "success" },
+  refund_requested: {
+    title: "Refund requested",
+    icon: RotateCcw,
+    tone: "neutral",
+    action: "booking",
+    actionLabel: "View booking",
+  },
+  refund_declined: {
+    title: "Refund request declined",
+    icon: XCircle,
+    tone: "warning",
+    action: "booking",
+    actionLabel: "View ticket",
+    sticky: true,
+  },
   booking_confirmed: {
     title: "Booking confirmed",
     icon: CalendarCheck,

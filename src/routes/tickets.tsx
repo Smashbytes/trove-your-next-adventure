@@ -1,7 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ticket, ChevronRight } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
-import { useMyBookings, type BookingView } from "@/lib/bookings-api";
+import { isActiveBooking, useMyBookings, type BookingStatusView, type BookingView } from "@/lib/bookings-api";
+
+const WARN = "bg-warning/15 text-warning";
+const BAD = "bg-destructive/15 text-destructive";
+const MUTED = "bg-surface-elevated text-muted-foreground";
+/** Every booking that isn't a plain valid ticket says so in the list. */
+const STATUS_BADGE: Partial<Record<BookingStatusView, { label: string; cls: string }>> = {
+  pending: { label: "Confirming payment", cls: WARN },
+  payment_failed: { label: "Not paid", cls: BAD },
+  cancelled: { label: "Cancelled", cls: BAD },
+  refund_requested: { label: "Refund requested", cls: WARN },
+  refund_processing: { label: "Refund on its way", cls: WARN },
+  refund_pending: { label: "Refund pending", cls: WARN },
+  partially_refunded: { label: "Partly refunded", cls: MUTED },
+  refunded: { label: "Refunded", cls: MUTED },
+  no_show: { label: "Missed", cls: MUTED },
+  unknown: { label: "Check with support", cls: MUTED },
+};
 import { formatDate, formatTime, formatPrice } from "@/lib/format";
 
 export const Route = createFileRoute("/tickets")({
@@ -67,8 +84,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function BookingRow({ booking, dim }: { booking: BookingView; dim?: boolean }) {
   const spot = booking.spot;
   if (!spot) return null;
-  const cancelled = booking.status === "cancelled" || booking.status === "refunded";
-  const refundPending = booking.status === "refund_pending";
+  const cancelled = !isActiveBooking(booking.status) && booking.status !== "pending";
+  const badge = STATUS_BADGE[booking.status];
   return (
     <Link
       to="/booking/$id" params={{ id: booking.id }}
@@ -89,8 +106,7 @@ function BookingRow({ booking, dim }: { booking: BookingView; dim?: boolean }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-2xs uppercase text-muted-foreground">{formatDate(spot.date)} · {formatTime(spot.date)}</p>
-          {cancelled && <span className="rounded-full bg-destructive/15 px-1.5 py-0.5 text-2xs font-semibold uppercase text-destructive">Cancelled</span>}
-          {refundPending && <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-2xs font-semibold uppercase text-warning">Refund pending</span>}
+          {badge && <span className={`rounded-full px-1.5 py-0.5 text-2xs font-semibold uppercase ${badge.cls}`}>{badge.label}</span>}
         </div>
         <p className="font-display text-base truncate">{spot.name}</p>
         <p className="text-xs text-muted-foreground">{booking.qty} × · {formatPrice(booking.total)}</p>

@@ -140,6 +140,7 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     customQuestions: (row as unknown as { custom_questions?: Spot["customQuestions"] }).custom_questions ?? [],
     bookingMode: row.booking_mode ?? undefined,
     rooms: readRooms(meta),
+    refundPolicy: (row as unknown as { refund_policy?: string }).refund_policy ?? undefined,
   };
 }
 

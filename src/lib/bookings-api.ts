@@ -23,11 +23,17 @@ import {
 
 export type BookingStatusView =
   | "confirmed"
-  | "cancelled"
-  | "refunded"
-  | "refund_pending"
+  | "completed"
+  | "pending"
   | "payment_failed"
-  | "pending";
+  | "cancelled"
+  | "refund_requested"
+  | "refund_processing"
+  | "refund_pending" // demo store only
+  | "partially_refunded"
+  | "refunded"
+  | "no_show"
+  | "unknown";
 
 export interface BookingView {
   id: string;
@@ -59,12 +65,44 @@ function mockToView(b: MockBooking, spot: Spot | null): BookingView {
   };
 }
 
+// Every value of the booking_status enum, mapped explicitly. Anything new must
+// never default to "confirmed" (a ticket would look valid when it isn't).
 function dbStatusToView(s: string): BookingStatusView {
-  if (s === "cancelled") return "cancelled";
-  if (s === "refunded") return "refunded";
-  if (["pending", "pending_payment"].includes(s)) return "pending";
-  if (s === "payment_failed") return "payment_failed";
-  return "confirmed";
+  switch (s) {
+    case "confirmed":
+    case "completed":
+    case "payment_failed":
+    case "cancelled":
+    case "refund_requested":
+    case "refund_processing":
+    case "partially_refunded":
+    case "refunded":
+    case "no_show":
+      return s;
+    case "pending":
+    case "pending_payment":
+      return "pending";
+    default:
+      return "unknown";
+  }
+}
+
+/** The booking can be used at the door (ticket shown as valid). */
+export function isActiveBooking(status: BookingStatusView): boolean {
+  return status === "confirmed" || status === "completed" || status === "partially_refunded";
+}
+
+/** Pull the `{ error }` sentence out of a failed edge-function call. */
+async function edgeError(error: unknown): Promise<Error> {
+  const ctx = (error as { context?: Response }).context;
+  let msg = (error as Error)?.message ?? "Something went wrong";
+  try {
+    if (ctx) {
+      const body = await ctx.json();
+      if (body?.error) msg = body.error;
+    }
+  } catch { /* not JSON */ }
+  return new Error(msg);
 }
 
 interface DbBookingRow {
@@ -209,18 +247,7 @@ export function useCreateBooking() {
           custom_answers: args.customAnswers ?? {},
         },
       });
-      if (error) {
-        // Edge function returns a JSON error body; surface its message.
-        const ctx = (error as { context?: Response }).context;
-        let msg = error.message;
-        try {
-          if (ctx) {
-            const body = await ctx.json();
-            if (body?.error) msg = body.error;
-          }
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
+      if (error) throw await edgeError(error);
       return { bookingId: (data as { booking_id: string }).booking_id };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
@@ -241,7 +268,7 @@ export interface InitPaymentArgs {
 /**
  * Start a TradeSafe transaction for a paid listing. Returns the
  * hosted-checkout URL; the caller redirects the browser there. Confirmation
- * happens server-side via the paystack-webhook.
+ * happens server-side (tradesafe-callback / tradesafe-reconcile).
  */
 export function useInitializePayment() {
   return useMutation<
@@ -265,17 +292,7 @@ export function useInitializePayment() {
           custom_answers: args.customAnswers ?? {},
         },
       });
-      if (error) {
-        const ctx = (error as { context?: Response }).context;
-        let msg = error.message;
-        try {
-          if (ctx) {
-            const body = await ctx.json();
-            if (body?.error) msg = body.error;
-          }
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
+      if (error) throw await edgeError(error);
       const d = data as { checkout_url: string; booking_id: string; checkout_expires_at: string };
       return { authorizationUrl: d.checkout_url, bookingId: d.booking_id, checkoutExpiresAt: d.checkout_expires_at };
     },
@@ -297,13 +314,82 @@ export function useCancelBooking() {
       const { error } = await supabase.functions.invoke("cancel-booking", {
         body: { booking_id: bookingId },
       });
-      if (error) throw error;
+      if (error) throw await edgeError(error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["booking"] });
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Refund requests (paid bookings). request_refund() checks the host's policy,
+// that the money is still in TradeSafe escrow, and puts the ticket on hold;
+// TROVE then approves (TradeSafe returns the money) or declines.
+// ---------------------------------------------------------------------------
+
+const REFUND_ERRORS: Record<string, string> = {
+  NO_REFUNDS: "This event doesn't offer refunds.",
+  WINDOW_CLOSED: "The refund window for this event has closed.",
+  ALREADY_REQUESTED: "You've already asked for a refund on this booking.",
+  NOT_REFUNDABLE: "This booking can't be refunded.",
+  FREE_BOOKING: "This booking was free, so there's nothing to refund. Cancel it instead.",
+  ALREADY_USED: "This ticket has already been used.",
+  NOT_IN_ESCROW: "We can't refund this payment in the app. Contact support and we'll sort it out.",
+  REASON_TOO_LONG: "Keep the reason under 500 characters.",
+  NOTHING_TO_WITHDRAW: "There's no open refund request to withdraw.",
+};
+
+function rpcError(error: { message?: string }): Error {
+  const code = (error.message ?? "").trim();
+  return new Error(REFUND_ERRORS[code] ?? error.message ?? "Something went wrong");
+}
+
+export function useRequestRefund() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, { bookingId: string; reason: string }>({
+    mutationFn: async ({ bookingId, reason }) => {
+      const { error } = await supabase.rpc("request_refund" as never, { p_booking_id: bookingId, p_reason: reason } as never);
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking"] });
+    },
+  });
+}
+
+export function useWithdrawRefund() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (bookingId) => {
+      const { error } = await supabase.rpc("withdraw_refund_request" as never, { p_booking_id: bookingId } as never);
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["booking"] });
+    },
+  });
+}
+
+/** Days before the event that refunds close, by listings.refund_policy. */
+const POLICY_DAYS: Record<string, number> = { "1d": 1, "7d": 7, "30d": 30 };
+
+export function refundPolicyText(policy: string | undefined): string {
+  if (policy === "none") return "No refunds";
+  const days = POLICY_DAYS[policy ?? "7d"] ?? 7;
+  return `Refunds up to ${days} day${days === 1 ? "" : "s"} before the event`;
+}
+
+/** When the guest can no longer ask for a refund (null = no refunds at all). */
+export function refundDeadline(policy: string | undefined, eventDate: string | undefined): Date | null {
+  if (policy === "none") return null;
+  const days = POLICY_DAYS[policy ?? "7d"] ?? 7;
+  const start = eventDate ? new Date(eventDate).getTime() : NaN;
+  if (Number.isNaN(start)) return null;
+  return new Date(start - days * 86_400_000);
 }
 
 /** Demo-only split "mark paid" (mutates localStorage, then refreshes the view). */

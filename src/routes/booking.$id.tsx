@@ -1,33 +1,80 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star, Share2 } from "lucide-react";
+import {
+  CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star, Share2,
+  Hourglass, AlertTriangle, LifeBuoy,
+} from "lucide-react";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
-import { useBooking, useCancelBooking, useMarkSplitPaid } from "@/lib/bookings-api";
+import {
+  isActiveBooking, refundDeadline, refundPolicyText, useBooking, useCancelBooking, useMarkSplitPaid,
+  useRequestRefund, useWithdrawRefund, type BookingView,
+} from "@/lib/bookings-api";
 import { useIsDemo } from "@/lib/listings-api";
 import { useBookingReview, useSubmitReview } from "@/lib/reviews-api";
 import { formatDate, formatPrice, formatTime } from "@/lib/format";
 import { attributeBookingShare, guestShareUrl, shareLink } from "@/lib/share";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export const Route = createFileRoute("/booking/$id")({
   head: () => ({ meta: [{ title: "Your Ticket — TROVE" }] }),
   component: BookingPage,
 });
 
+type Tone = "success" | "warning" | "danger" | "neutral";
+
+/** What the guest is told for each booking state (never "You're in" unless it's true). */
+function statusCopy(b: BookingView): { tone: Tone; title: string; body: string; ticketNote: string; spin?: boolean } {
+  const amount = formatPrice(b.total);
+  switch (b.status) {
+    case "confirmed":
+    case "completed":
+      return { tone: "success", title: "You're in.", body: `Confirmation sent to ${b.buyer?.email ?? "your email"}`, ticketNote: `Show at entry · Total ${amount}` };
+    case "partially_refunded":
+      return { tone: "success", title: "You're in.", body: "Part of your payment was refunded. Your ticket is still valid.", ticketNote: "Show at entry · Partly refunded" };
+    case "pending":
+      return { tone: "warning", title: "Confirming payment…", body: "This updates automatically once TradeSafe confirms your payment.", ticketNote: "Awaiting payment confirmation…", spin: true };
+    case "refund_requested":
+      return { tone: "warning", title: "Refund requested", body: "Your ticket is on hold while TROVE reviews your request. We'll let you know.", ticketNote: "On hold · refund requested" };
+    case "refund_processing":
+    case "refund_pending":
+      return { tone: "warning", title: "Refund on its way", body: `TradeSafe is returning ${amount} to your original payment method. Allow 3–5 working days.`, ticketNote: "Ticket cancelled · refund processing" };
+    case "refunded":
+      return { tone: "neutral", title: "Refunded", body: `${amount} was returned to your original payment method.`, ticketNote: "Ticket cancelled · refunded" };
+    case "cancelled":
+      return { tone: "danger", title: "Cancelled", body: "This booking was cancelled.", ticketNote: "Ticket cancelled" };
+    case "payment_failed":
+      return { tone: "danger", title: "Payment didn't go through", body: "You weren't charged and the spot was released. Book again if you still want to go.", ticketNote: "No ticket · payment not received" };
+    case "no_show":
+      return { tone: "neutral", title: "Missed", body: "This ticket wasn't used at the event.", ticketNote: "Ticket not used" };
+    default:
+      return { tone: "neutral", title: "Check with support", body: "We couldn't read this booking's status. Our support team can help.", ticketNote: "Status unavailable" };
+  }
+}
+
+const TONE_RING: Record<Tone, string> = {
+  success: "bg-success/15 text-success",
+  warning: "bg-warning/15 text-warning",
+  danger: "bg-destructive/15 text-destructive",
+  neutral: "bg-surface-elevated text-muted-foreground",
+};
+
+function StatusIcon({ tone, spin }: { tone: Tone; spin?: boolean }) {
+  const cls = "h-8 w-8";
+  if (spin) return <RotateCcw className={`${cls} animate-spin`} />;
+  if (tone === "success") return <CheckCircle2 className={cls} />;
+  if (tone === "warning") return <Hourglass className={cls} />;
+  if (tone === "danger") return <XCircle className={cls} />;
+  return <AlertTriangle className={cls} />;
+}
+
 function BookingPage() {
   const { id } = useParams({ from: "/booking/$id" });
   const { data: booking, isLoading } = useBooking(id);
-  const cancel = useCancelBooking();
   const markPaid = useMarkSplitPaid();
   const demo = useIsDemo();
-  const { data: existingReview } = useBookingReview(id);
-  const submitReview = useSubmitReview();
   const spot = booking?.spot ?? null;
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [reviewBody, setReviewBody] = useState("");
 
   // Credit the share link that brought this guest here (no-op without one).
   const listingId = spot?.id;
@@ -57,10 +104,9 @@ function BookingPage() {
   const collected = split ? paidCount * split.perPerson : 0;
   const progress = split ? (paidCount / split.participants.length) * 100 : 0;
 
-  const isCancelled = booking.status === "cancelled" || booking.status === "refunded";
-  const isRefundPending = booking.status === "refund_pending";
-  const isPending = booking.status === "pending";
-  const isActive = booking.status === "confirmed";
+  const isActive = isActiveBooking(booking.status);
+  const copy = statusCopy(booking);
+  const eventOver = new Date(spot.date).getTime() < Date.now();
 
   return (
     <div className="mx-auto min-h-screen max-w-md p-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-12">
@@ -72,49 +118,20 @@ function BookingPage() {
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="mt-6 text-center"
       >
-        {isActive ? (
-          <>
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/15">
-              <CheckCircle2 className="h-8 w-8 text-success" />
-            </div>
-            <h1 className="mt-4 font-display text-3xl">You're in.</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Confirmation sent to {booking.buyer?.email ?? "your email"}
-            </p>
-          </>
-        ) : isPending ? (
-          <>
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-warning/15">
-              <RotateCcw className="h-8 w-8 animate-spin text-warning" />
-            </div>
-            <h1 className="mt-4 font-display text-3xl">Confirming payment…</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              This updates automatically once TradeSafe confirms your payment.
-            </p>
-          </>
-        ) : isRefundPending ? (
-          <>
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-warning/15">
-              <RotateCcw className="h-8 w-8 text-warning" />
-            </div>
-            <h1 className="mt-4 font-display text-3xl">Refund pending</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatPrice(booking.total)} will return to your card in 1–3 days.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-destructive/15">
-              <XCircle className="h-8 w-8 text-destructive" />
-            </div>
-            <h1 className="mt-4 font-display text-3xl">Cancelled</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Refund of {formatPrice(booking.total)} processed.</p>
-          </>
+        <div className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${TONE_RING[copy.tone]}`}>
+          <StatusIcon tone={copy.tone} spin={copy.spin} />
+        </div>
+        <h1 className="mt-4 font-display text-3xl">{copy.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{copy.body}</p>
+        {booking.status === "payment_failed" && (
+          <Link to="/spot/$id" params={{ id: spot.id }} className="mt-4 inline-flex rounded-full bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow-soft">
+            Book again
+          </Link>
         )}
       </motion.div>
 
       {/* Share loop — confirmed bookings only */}
-      {isActive && !demo && (
+      {isActive && !demo && !eventOver && (
         <motion.button
           type="button"
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
@@ -188,11 +205,7 @@ function BookingPage() {
             <QRCodeSVG value={`TROVE:${booking.ticketCode}`} size={160} bgColor="#ffffff" fgColor="#0a0612" level="H" />
           </div>
           <p className="mt-3 text-center font-mono text-xs tracking-widest text-muted-foreground">{booking.ticketCode}</p>
-          <p className="mt-1 text-center text-2xs text-muted-foreground">
-            {isActive ? `Show at entry · Total ${formatPrice(booking.total)}` :
-              isPending ? "Awaiting payment confirmation…" :
-              isRefundPending ? "Ticket invalidated · Refund processing" : "Ticket cancelled"}
-          </p>
+          <p className="mt-1 text-center text-2xs text-muted-foreground">{copy.ticketNote}</p>
           {booking.paymentRef && (
             <p className="mt-1 text-center text-2xs text-muted-foreground/60 font-mono">
               Ref · {booking.paymentRef}
@@ -201,7 +214,7 @@ function BookingPage() {
         </div>
       </motion.div>
 
-      {/* Split bill tracker */}
+      {/* Split bill tracker (demo account) */}
       {split && (
         <motion.section
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
@@ -224,7 +237,6 @@ function BookingPage() {
             </button>
           </div>
 
-          {/* Progress */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-2xs text-muted-foreground">
               <span>{paidCount} of {split.participants.length} paid</span>
@@ -242,7 +254,6 @@ function BookingPage() {
             </div>
           </div>
 
-          {/* Participants */}
           <ul className="space-y-2">
             {split.participants.map((p) => (
               <li
@@ -282,99 +293,21 @@ function BookingPage() {
       )}
 
       {/* Actions */}
-      {isActive && (
+      {isActive && !eventOver && (
         <div className="mt-6 space-y-2">
           <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-success/15 py-3 text-sm font-semibold text-success">
             <MessageCircle className="h-4 w-4" /> Reminder sent on WhatsApp
           </button>
-          {!confirmCancel ? (
-            <button
-              onClick={() => setConfirmCancel(true)}
-              className="w-full rounded-full bg-surface ring-1 ring-border py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:ring-destructive/40 transition"
-            >
-              Cancel booking
-            </button>
-          ) : (
-            <div className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/40 p-4 space-y-2">
-              <p className="text-sm font-semibold">Cancel this booking?</p>
-              <p className="text-2xs text-muted-foreground">
-                {formatPrice(booking.total)} will be refunded to your original payment method.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setConfirmCancel(false)}
-                  className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold"
-                >
-                  Keep it
-                </button>
-                <button
-                  onClick={() => { cancel.mutate(booking.id); setConfirmCancel(false); }}
-                  className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground"
-                >
-                  Confirm cancel
-                </button>
-              </div>
-            </div>
-          )}
+          {booking.status === "confirmed" && (booking.total > 0 && !demo
+            ? <RefundPanel booking={booking} policy={spot.refundPolicy} eventDate={spot.date} />
+            : <CancelPanel booking={booking} />)}
         </div>
       )}
 
-      {isRefundPending && (
-        <div className="mt-6 rounded-2xl bg-warning/10 ring-1 ring-warning/40 p-4 text-center">
-          <p className="text-xs text-muted-foreground">
-            Refund of <span className="font-semibold text-foreground">{formatPrice(booking.total)}</span> is processing…
-          </p>
-        </div>
-      )}
+      {booking.status === "refund_requested" && <WithdrawPanel bookingId={booking.id} />}
 
-      {/* Review (live confirmed bookings only) */}
-      {isActive && !demo && (
-        <section className="mt-6 rounded-2xl bg-surface ring-1 ring-border p-5">
-          <h3 className="font-display text-lg">Rate your experience</h3>
-          {existingReview ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              You rated this {existingReview.rating}★. Thanks for the feedback!
-            </p>
-          ) : (
-            <>
-              <div className="mt-3 flex gap-1.5">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} onClick={() => setRating(n)} aria-label={`${n} stars`}>
-                    <Star className={`h-7 w-7 ${n <= rating ? "fill-warning text-warning" : "text-muted-foreground"}`} />
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={reviewBody}
-                onChange={(e) => setReviewBody(e.target.value)}
-                placeholder="How was it? (optional)"
-                aria-label="Your review (optional)"
-                rows={3}
-                className="mt-3 w-full rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
-              />
-              <button
-                disabled={submitReview.isPending}
-                onClick={async () => {
-                  try {
-                    await submitReview.mutateAsync({
-                      bookingId: booking.id,
-                      listingId: booking.listingId,
-                      rating,
-                      body: reviewBody,
-                    });
-                    toast.success("Review posted — thank you!");
-                  } catch (e) {
-                    toast.error(friendlyError(e, "Couldn't post review."));
-                  }
-                }}
-                className="mt-3 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
-              >
-                Post review
-              </button>
-            </>
-          )}
-        </section>
-      )}
+      {/* Review: only after the experience (the server checks this too) */}
+      {isActive && !demo && eventOver && <ReviewPanel bookingId={booking.id} listingId={booking.listingId} />}
 
       <Link
         to="/tickets"
@@ -383,5 +316,203 @@ function BookingPage() {
         Back to all tickets →
       </Link>
     </div>
+  );
+}
+
+function Panel({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "danger" }) {
+  return (
+    <div className={`rounded-2xl p-4 space-y-2 ring-1 ${tone === "danger" ? "bg-destructive/10 ring-destructive/40" : "bg-surface ring-border"}`}>
+      {children}
+    </div>
+  );
+}
+
+/** Free bookings: cancel straight away (cancel-booking). */
+function CancelPanel({ booking }: { booking: BookingView }) {
+  const cancel = useCancelBooking();
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="w-full rounded-full bg-surface ring-1 ring-border py-3 text-sm font-semibold text-muted-foreground hover:text-destructive hover:ring-destructive/40 transition"
+      >
+        Cancel booking
+      </button>
+    );
+  }
+  return (
+    <Panel tone="danger">
+      <p className="text-sm font-semibold">Cancel this booking?</p>
+      <p className="text-2xs text-muted-foreground">Your spot is released and your ticket stops working.</p>
+      <div className="flex gap-2">
+        <button onClick={() => setConfirming(false)} className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold">
+          Keep it
+        </button>
+        <button
+          disabled={cancel.isPending}
+          onClick={() =>
+            cancel.mutate(booking.id, {
+              onSuccess: () => { setConfirming(false); toast.success("Booking cancelled."); },
+              onError: (e) => toast.error(friendlyError(e, "We couldn't cancel this booking. Try again.")),
+            })
+          }
+          className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-50"
+        >
+          {cancel.isPending ? "Cancelling…" : "Confirm cancel"}
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+/** Paid bookings: ask for a refund within the host's policy (request_refund). */
+function RefundPanel({ booking, policy, eventDate }: { booking: BookingView; policy?: string; eventDate: string }) {
+  const request = useRequestRefund();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const deadline = refundDeadline(policy, eventDate);
+  const allowed = policy !== "none" && (!deadline || deadline.getTime() > Date.now());
+  const until = deadline
+    ? new Intl.DateTimeFormat("en-ZA", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Johannesburg" }).format(deadline)
+    : null;
+
+  if (!allowed) {
+    return (
+      <Panel>
+        <p className="text-sm font-semibold">{refundPolicyText(policy)}</p>
+        <p className="text-2xs text-muted-foreground">
+          {policy === "none"
+            ? "The host doesn't offer refunds for this event."
+            : `The refund window closed on ${until}.`}{" "}
+          If something's gone wrong, our support team can help.
+        </p>
+        <Link to="/support" className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground underline">
+          <LifeBuoy className="h-3.5 w-3.5" /> Contact support
+        </Link>
+      </Panel>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full rounded-full bg-surface ring-1 ring-border py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition"
+      >
+        Request a refund
+      </button>
+    );
+  }
+
+  return (
+    <Panel>
+      <p className="text-sm font-semibold">Request a refund of {formatPrice(booking.total)}</p>
+      <p className="text-2xs text-muted-foreground">
+        {refundPolicyText(policy)}{until ? ` (until ${until})` : ""}. Your ticket goes on hold while TROVE checks your request;
+        once approved, TradeSafe returns the money to your original payment method.
+      </p>
+      <label className="block">
+        <span className="sr-only">Reason (optional)</span>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="Why do you need a refund? (optional)"
+          className="w-full rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary resize-none"
+        />
+      </label>
+      <div className="flex gap-2">
+        <button onClick={() => setOpen(false)} className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold">
+          Keep my ticket
+        </button>
+        <button
+          disabled={request.isPending}
+          onClick={() =>
+            request.mutate({ bookingId: booking.id, reason }, {
+              onSuccess: () => { setOpen(false); toast.success("Refund requested. We'll let you know."); },
+              onError: (e) => toast.error(friendlyError(e, "We couldn't send your refund request. Try again.")),
+            })
+          }
+          className="flex-1 rounded-full bg-gradient-brand py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          {request.isPending ? "Sending…" : "Send request"}
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function WithdrawPanel({ bookingId }: { bookingId: string }) {
+  const withdraw = useWithdrawRefund();
+  return (
+    <div className="mt-6">
+      <Panel>
+        <p className="text-xs text-muted-foreground">Changed your mind? Withdraw the request and your ticket works again.</p>
+        <button
+          disabled={withdraw.isPending}
+          onClick={() =>
+            withdraw.mutate(bookingId, {
+              onSuccess: () => toast.success("Request withdrawn. Your ticket is valid again."),
+              onError: (e) => toast.error(friendlyError(e, "We couldn't withdraw the request. Try again.")),
+            })
+          }
+          className="w-full rounded-full bg-surface ring-1 ring-border py-2.5 text-xs font-semibold disabled:opacity-50"
+        >
+          {withdraw.isPending ? "Withdrawing…" : "Withdraw refund request"}
+        </button>
+      </Panel>
+    </div>
+  );
+}
+
+function ReviewPanel({ bookingId, listingId }: { bookingId: string; listingId: string }) {
+  const { data: existingReview } = useBookingReview(bookingId);
+  const submitReview = useSubmitReview();
+  const [rating, setRating] = useState(5);
+  const [reviewBody, setReviewBody] = useState("");
+  return (
+    <section className="mt-6 rounded-2xl bg-surface ring-1 ring-border p-5">
+      <h3 className="font-display text-lg">Rate your experience</h3>
+      {existingReview ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          You rated this {existingReview.rating}★. Thanks for the feedback!
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex gap-1.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} onClick={() => setRating(n)} aria-label={`${n} stars`} aria-pressed={n === rating}>
+                <Star className={`h-7 w-7 ${n <= rating ? "fill-warning text-warning" : "text-muted-foreground"}`} />
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={reviewBody}
+            onChange={(e) => setReviewBody(e.target.value)}
+            placeholder="How was it? (optional)"
+            aria-label="Your review (optional)"
+            maxLength={1000}
+            rows={3}
+            className="mt-3 w-full rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
+          />
+          <button
+            disabled={submitReview.isPending}
+            onClick={async () => {
+              try {
+                await submitReview.mutateAsync({ bookingId, listingId, rating, body: reviewBody });
+                toast.success("Review posted — thank you!");
+              } catch (e) {
+                toast.error(friendlyError(e, "Couldn't post review."));
+              }
+            }}
+            className="mt-3 w-full rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+          >
+            Post review
+          </button>
+        </>
+      )}
+    </section>
   );
 }

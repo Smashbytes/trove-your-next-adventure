@@ -7,7 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { formatPrice, formatDate, formatTime } from "@/lib/format";
 import { useIsDemo, useListing } from "@/lib/listings-api";
-import { useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
+import { refundPolicyText, useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
 import { clearCheckoutIntent, getCheckoutIntent, setPendingPayment, type CheckoutIntent } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { friendlyError } from "@/lib/errors";
@@ -267,6 +267,9 @@ function CheckoutPage() {
             {deliveryFee > 0 && <Row label="WhatsApp delivery" value={formatPrice(deliveryFee)} muted />}
             <div className="border-t border-dashed border-border pt-2">
               <Row label="Total" value={formatPrice(total)} bold />
+              {isTradeSafe && (
+                <p className="mt-1 text-xs text-muted-foreground">{refundPolicyText(spot.refundPolicy)}</p>
+              )}
               {intent.split && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Split with {intent.split.participants.length - 1} friend(s) · {formatPrice(intent.split.perPerson)} each
