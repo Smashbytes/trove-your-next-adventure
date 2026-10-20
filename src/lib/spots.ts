@@ -80,6 +80,8 @@ export interface Spot {
   bookingMode?: string;
   /** Stays: rooms the host offers (listings.metadata.rooms), price in Rand. */
   rooms?: Array<{ name: string; capacity?: number; price: number }>;
+  /** listings.refund_policy: "none" | "1d" | "7d" | "30d" (host's choice). */
+  refundPolicy?: string;
 }
 
 export interface CustomQuestion {

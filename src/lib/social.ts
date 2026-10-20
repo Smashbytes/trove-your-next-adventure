@@ -164,15 +164,16 @@ export function useFollowedHosts() {
     queryKey: ["followed-hosts", [...ids].sort()],
     enabled: ids.length > 0,
     queryFn: async () => {
+      // Public Spot card only: host_profiles itself is readable by the Spot's own team.
       const { data, error } = await supabase
-        .from("host_profiles")
-        .select("user_id, slug, city, verified, hero_url")
+        .from("public_host_profiles")
+        .select("user_id, slug, display_name, city, verified, hero_url")
         .in("user_id", ids);
       if (error) throw error;
-      return (data ?? []).map((h) => ({
-        userId: h.user_id,
-        slug: h.slug,
-        name: prettifySlug(h.slug),
+      return (data ?? []).filter((h) => h.user_id && h.slug).map((h) => ({
+        userId: h.user_id!,
+        slug: h.slug!,
+        name: h.display_name || prettifySlug(h.slug),
         city: h.city,
         verified: !!h.verified,
         heroUrl: h.hero_url,

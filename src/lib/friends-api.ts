@@ -103,19 +103,24 @@ export function useAddFriend() {
   });
 }
 
+const RESPOND_ERRORS: Record<string, string> = {
+  NOT_YOURS_TO_ANSWER: "Only the person you sent the request to can answer it.",
+  ALREADY_ANSWERED: "This request was already answered.",
+  REQUEST_NOT_FOUND: "This friend request no longer exists.",
+};
+
+/** Accept/decline an incoming request: respond_friend_request() lets only the recipient answer. */
 export function useRespondFriend() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation<void, Error, { friendId: string; accept: boolean }>({
     mutationFn: async ({ friendId, accept }) => {
       if (!user) throw new Error("Not authenticated");
-      const pair = orderedPair(user.id, friendId);
-      const { error } = await supabase
-        .from("friends")
-        .update({ status: accept ? "accepted" : "declined" })
-        .eq("user_a", pair.user_a)
-        .eq("user_b", pair.user_b);
-      if (error) throw error;
+      const { error } = await supabase.rpc("respond_friend_request" as never, {
+        p_other: friendId,
+        p_accept: accept,
+      } as never);
+      if (error) throw new Error(RESPOND_ERRORS[(error.message ?? "").trim()] ?? error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["friends"] }),
   });

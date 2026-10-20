@@ -111,7 +111,7 @@ const SPARK_TOGGLES: {
   {
     key: "friends_going_optin",
     label: "Friends Going participation",
-    hint: "Let linked friends see you're going to a spot",
+    hint: "Off unless you turn it on. Lets linked friends see the spots you're going to",
   },
   {
     key: "is_private",
