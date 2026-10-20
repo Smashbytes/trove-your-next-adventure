@@ -7,7 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { formatPrice, formatDate, formatTime } from "@/lib/format";
 import { useIsDemo, useListing } from "@/lib/listings-api";
-import { refundPolicyText, useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
+import { refundPolicyText, useCheckoutFees, useCreateBooking, useInitializePayment } from "@/lib/bookings-api";
 import { clearCheckoutIntent, getCheckoutIntent, setPendingPayment, type CheckoutIntent } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { friendlyError } from "@/lib/errors";
@@ -38,6 +38,7 @@ function CheckoutPage() {
   const demo = useIsDemo();
   const createBooking = useCreateBooking();
   const initPayment = useInitializePayment();
+  const { data: fees } = useCheckoutFees();
   const { isAuthenticated, openAuthModal, profile, user } = useAuth();
 
   const [intent, setIntent] = useState<CheckoutIntent | null>(null);
@@ -105,7 +106,9 @@ function CheckoutPage() {
   // Free/demo bookings have no payment rail for a standalone fee — the R5
   // WhatsApp delivery fee only actually applies to paid TradeSafe checkouts.
   const deliveryFee = isTradeSafe && delivery === "whatsapp" ? WHATSAPP_DELIVERY_FEE_RAND : 0;
-  const total = intent.total + deliveryFee;
+  // TROVE's booking fee rides on paid bookings only (reserve_booking charges it).
+  const bookingFee = isTradeSafe ? (fees?.bookingFee ?? 0) : 0;
+  const total = intent.total + deliveryFee + bookingFee;
   const phoneDigits = phone.replace(/\D/g, "");
 
   function validateDetails(): DetailErrors {
@@ -264,6 +267,7 @@ function CheckoutPage() {
               label={`${intent.option ? `${intent.option.label} · ` : ""}${isFree ? "Spots" : "Tickets"} × ${intent.qty}`}
               value={formatPrice(intent.total)}
             />
+            {bookingFee > 0 && <Row label="Booking fee (non-refundable)" value={formatPrice(bookingFee)} muted />}
             {deliveryFee > 0 && <Row label="WhatsApp delivery" value={formatPrice(deliveryFee)} muted />}
             <div className="border-t border-dashed border-border pt-2">
               <Row label="Total" value={formatPrice(total)} bold />

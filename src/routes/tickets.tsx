@@ -11,7 +11,7 @@ const STATUS_BADGE: Partial<Record<BookingStatusView, { label: string; cls: stri
   pending: { label: "Confirming payment", cls: WARN },
   payment_failed: { label: "Not paid", cls: BAD },
   cancelled: { label: "Cancelled", cls: BAD },
-  refund_requested: { label: "Refund requested", cls: WARN },
+  refund_requested: { label: "Cancellation requested", cls: WARN },
   refund_processing: { label: "Refund on its way", cls: WARN },
   refund_pending: { label: "Refund pending", cls: WARN },
   partially_refunded: { label: "Partly refunded", cls: MUTED },
@@ -85,7 +85,7 @@ function BookingRow({ booking, dim }: { booking: BookingView; dim?: boolean }) {
   const spot = booking.spot;
   if (!spot) return null;
   const cancelled = !isActiveBooking(booking.status) && booking.status !== "pending";
-  const badge = STATUS_BADGE[booking.status];
+  const badge = booking.cancelledBy === "host" ? { label: "Event cancelled", cls: BAD } : STATUS_BADGE[booking.status];
   return (
     <Link
       to="/booking/$id" params={{ id: booking.id }}
