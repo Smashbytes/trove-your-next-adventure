@@ -82,6 +82,8 @@ export function useNotifications() {
         .from("notifications")
         .select(SELECT)
         .eq("user_id", user!.id)
+        // Host notifications (new bookings, followers…) belong to the Engine.
+        .eq("audience", "guest")
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -118,6 +120,8 @@ export function useNotificationStream() {
           filter: `user_id=eq.${uid}`,
         },
         (msg) => {
+          // Same user, but a host notification for the Engine: not shown here.
+          if ((msg.new as { audience?: string }).audience !== "guest") return;
           const row = normalize(msg.new as Parameters<typeof normalize>[0]);
           qc.setQueryData<AppNotification[]>(key, (prev = []) =>
             prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50),
@@ -184,6 +188,7 @@ export function useMarkAllRead() {
         .from("notifications")
         .update({ read_at: new Date().toISOString() })
         .eq("user_id", user.id)
+        .eq("audience", "guest")
         .is("read_at", null);
       if (error) throw error;
     },
