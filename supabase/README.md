@@ -1,0 +1,1 @@
+Migrations for the shared apps database live only in github.com/Smashbytes/trove-supabase (migrations/, see its README). This repo keeps none. The avatars-bucket migration that used to be here is in trove-supabase/migrations/archive/guest-app/.
