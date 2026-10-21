@@ -1244,60 +1244,75 @@ export type Database = {
       }
       profiles: {
         Row: {
+          anonymised_at: string | null
           avatar_url: string | null
           city: string | null
+          close_reason: string | null
+          closed_by: string | null
           created_at: string
           date_of_birth: string | null
-          gender: string | null
-          interests: string[]
-          notification_prefs: Json
+          deactivated_at: string | null
+          deletion_requested_at: string | null
           discoverable: boolean
           friends_going_optin: boolean
           full_name: string | null
+          gender: string | null
           id: string
+          interests: string[]
           is_admin: boolean
           is_host: boolean
           is_private: boolean
+          notification_prefs: Json
           paystack_customer_code: string | null
           phone: string | null
           updated_at: string
           username: string | null
         }
         Insert: {
+          anonymised_at?: string | null
           avatar_url?: string | null
           city?: string | null
+          close_reason?: string | null
+          closed_by?: string | null
           created_at?: string
           date_of_birth?: string | null
-          gender?: string | null
-          interests?: string[]
-          notification_prefs?: Json
+          deactivated_at?: string | null
+          deletion_requested_at?: string | null
           discoverable?: boolean
           friends_going_optin?: boolean
           full_name?: string | null
+          gender?: string | null
           id: string
+          interests?: string[]
           is_admin?: boolean
           is_host?: boolean
           is_private?: boolean
+          notification_prefs?: Json
           paystack_customer_code?: string | null
           phone?: string | null
           updated_at?: string
           username?: string | null
         }
         Update: {
+          anonymised_at?: string | null
           avatar_url?: string | null
           city?: string | null
+          close_reason?: string | null
+          closed_by?: string | null
           created_at?: string
           date_of_birth?: string | null
-          gender?: string | null
-          interests?: string[]
-          notification_prefs?: Json
+          deactivated_at?: string | null
+          deletion_requested_at?: string | null
           discoverable?: boolean
           friends_going_optin?: boolean
           full_name?: string | null
+          gender?: string | null
           id?: string
+          interests?: string[]
           is_admin?: boolean
           is_host?: boolean
           is_private?: boolean
+          notification_prefs?: Json
           paystack_customer_code?: string | null
           phone?: string | null
           updated_at?: string
