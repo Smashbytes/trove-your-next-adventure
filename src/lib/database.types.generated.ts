@@ -1046,6 +1046,7 @@ export type Database = {
       }
       notifications: {
         Row: {
+          audience: string
           created_at: string
           id: string
           payload: Json
@@ -1054,6 +1055,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          audience?: string
           created_at?: string
           id?: string
           payload?: Json
@@ -1062,6 +1064,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          audience?: string
           created_at?: string
           id?: string
           payload?: Json
