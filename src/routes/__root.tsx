@@ -42,6 +42,7 @@ import { queryClient } from "@/lib/query-client";
 
 import appCss from "../styles.css?url";
 import { BrandStage } from "@/components/BrandStage";
+import { AccountClosingScreen } from "@/components/AccountClosingScreen";
 
 const SITE_URL = ((import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || "https://trove-your-next-adventure.pages.dev").replace(/\/$/, "");
 const TITLE = "TROVE — Discover. Book. Experience.";
@@ -121,7 +122,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function AppWithAuth() {
-  const { showAuthModal, closeAuthModal, isAuthenticated } = useAuth();
+  const { showAuthModal, closeAuthModal, isAuthenticated, profile } = useAuth();
+  // Closing (14-day grace): nothing else until they keep it or sign out.
+  const closingSince = isAuthenticated && profile?.deletion_requested_at && !profile.anonymised_at ? profile.deletion_requested_at : null;
   const [authLoaded, setAuthLoaded] = useState(false);
   // This tree only renders in the browser (see RootComponent), so session
   // storage can be read up front: the first launch of a session plays the
@@ -150,7 +153,7 @@ function AppWithAuth() {
 
   return (
     <>
-      <Outlet />
+      {closingSince ? <AccountClosingScreen requestedAt={closingSince} /> : <Outlet />}
       {playSplash && (
         <Suspense
           fallback={

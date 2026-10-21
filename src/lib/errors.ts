@@ -19,6 +19,8 @@ const RULES: Array<[RegExp, string]> = [
   [/same.*password|new password should be different/i, "Choose a password you haven't used before."],
   [/jwt expired|invalid jwt|refresh token|session.*(expired|missing)|auth session missing/i,
     "Your session has expired. Sign in again to continue."],
+  [/ACCOUNT_CLOSING/, "Your account is being closed. Open Settings and keep your account to do this."],
+  [/user is banned/i, "This account has been closed."],
   [/row-level security|permission denied|not authori[sz]ed/i, "You don't have permission to do that."],
   [/duplicate key|already exists|unique constraint/i, "That's already taken. Try something different."],
   [/violates check constraint|invalid input syntax|out of range/i,

@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
-import { AtSign, BadgeCheck, Check, Heart, LifeBuoy, Bell, ShieldCheck, Sparkles, ChevronRight, Zap, X } from "lucide-react";
+import { AtSign, BadgeCheck, Check, Heart, LifeBuoy, Bell, ShieldCheck, Sparkles, ChevronRight, Zap, X, UserX } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
@@ -11,6 +11,7 @@ import { getGuestPrefs, saveGuestPrefs, type GuestPrefs } from "@/lib/guest-pref
 import { isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
 import { friendlyError, toastError } from "@/lib/errors";
 import { useTopLevelCategories } from "@/lib/listings-api";
+import { closingDate, useAccountClosure, useRequestAccountClosure } from "@/lib/account-closure";
 import {
   normalizeUsername,
   USERNAME_RE,
@@ -70,6 +71,8 @@ function SettingsPage() {
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </Link>
+
+        <CloseAccount />
       </div>
     </ResponsiveShell>
   );
@@ -394,6 +397,110 @@ function PrivacyData() {
           Privacy Policy
         </a>
       </p>
+    </Card>
+  );
+}
+
+/**
+ * Close the account (SHR-L03-04). Refused while something is in flight; then
+ * 14 days to change your mind (sign in again → Keep my account); then personal
+ * details are wiped. Bookings, tickets and payments stay on record.
+ */
+function CloseAccount() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const closure = useAccountClosure(open);
+  const request = useRequestAccountClosure();
+  const blockers = request.data && !request.data.ok ? request.data.blockers : closure.data?.blockers ?? [];
+
+  function closeNow() {
+    request.mutate(reason, {
+      onSuccess: async (res) => {
+        if (!res.ok) return;
+        toast.success(`Your account will be closed on ${closingDate(res.wipeAfter)}. Sign in before then to keep it.`);
+        await signOut();
+        navigate({ to: "/" });
+      },
+      onError: toastError("Couldn't close your account. Try again."),
+    });
+  }
+
+  return (
+    <Card title="Close account" icon={UserX}>
+      {!open ? (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Closing removes your name, photo, contact details and friends from TROVE. Your bookings, tickets and payments
+            stay on record, as the law requires.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="w-full rounded-full bg-surface-elevated py-2.5 text-sm font-semibold text-destructive ring-1 ring-border transition hover:ring-destructive/50"
+          >
+            Close my account
+          </button>
+        </div>
+      ) : closure.isLoading ? (
+        <p className="text-xs text-muted-foreground" role="status">Checking your account…</p>
+      ) : closure.isError ? (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">We couldn't check your account right now.</p>
+          <button type="button" onClick={() => closure.refetch()} className="text-xs font-semibold underline">Try again</button>
+        </div>
+      ) : blockers.length > 0 ? (
+        <div className="space-y-3" role="alert">
+          <p className="text-sm font-semibold">Finish these first</p>
+          <ul className="space-y-2">
+            {blockers.map((b) => (
+              <li key={b.code} className="rounded-xl bg-surface-elevated p-3 text-xs ring-1 ring-border">{b.message}</li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setOpen(false); request.reset(); }} className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold">
+              OK
+            </button>
+            <Link to="/tickets" className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-center text-xs font-semibold">
+              My tickets
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Close your TROVE account?</p>
+          <p className="text-xs text-muted-foreground">
+            You'll be signed out on every device and hidden from other guests straight away. You have 14 days to change
+            your mind: sign in again and choose Keep my account. After that your personal details are wiped and this
+            email can't be used to sign in to this account again.
+          </p>
+          <label className="block">
+            <span className="sr-only">Why are you leaving? (optional)</span>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Why are you leaving? (optional)"
+              className="w-full resize-none rounded-xl bg-surface-elevated p-3 text-sm ring-1 ring-border focus:outline-none focus:ring-primary"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setOpen(false)} className="flex-1 rounded-full bg-surface ring-1 ring-border py-2 text-xs font-semibold">
+              Keep my account
+            </button>
+            <button
+              type="button"
+              disabled={request.isPending}
+              onClick={closeNow}
+              className="flex-1 rounded-full bg-destructive py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-60"
+            >
+              {request.isPending ? "Closing…" : "Close account"}
+            </button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
