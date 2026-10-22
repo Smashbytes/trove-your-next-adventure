@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Ticket, ChevronRight } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { isActiveBooking, useMyBookings, type BookingStatusView, type BookingView } from "@/lib/bookings-api";
+import { LoadMore } from "@/components/LoadMore";
+import type { Spot } from "@/lib/spots";
 
 const WARN = "bg-warning/15 text-warning";
 const BAD = "bg-destructive/15 text-destructive";
@@ -27,14 +29,16 @@ export const Route = createFileRoute("/tickets")({
 });
 
 function TicketsPage() {
-  const { data: bookings = [], isLoading } = useMyBookings();
-  const now = Date.now();
-  const upcoming = bookings.filter((b) => b.spot && new Date(b.spot.date).getTime() >= now);
+  const bookingsQuery = useMyBookings();
+  const { isLoading } = bookingsQuery;
+  const bookings = bookingsQuery.data?.pages.flatMap((p) => p.bookings) ?? [];
+  const total = bookingsQuery.data?.pages[0]?.total ?? 0;
+  const upcoming = bookings.filter((b) => b.spot && !isOver(b.spot));
   const past = bookings.filter((b) => !upcoming.includes(b));
 
   return (
     <ResponsiveShell title="My Tickets">
-      <p className="mb-4 text-xs text-muted-foreground">{bookings.length} bookings</p>
+      <p className="mb-4 text-xs text-muted-foreground">{total} bookings</p>
       <div className="space-y-6">
         {isLoading && (
           <div className="space-y-3">
@@ -67,9 +71,21 @@ function TicketsPage() {
             {past.map((b) => <BookingRow key={b.id} booking={b} dim />)}
           </Section>
         )}
+        <LoadMore
+          hasMore={bookingsQuery.hasNextPage}
+          loading={bookingsQuery.isFetchingNextPage}
+          onClick={() => bookingsQuery.fetchNextPage()}
+          label="Older bookings"
+        />
       </div>
     </ResponsiveShell>
   );
+}
+
+/** An event is over once it ends (or starts, with no end); a venue never is. */
+function isOver(spot: Spot): boolean {
+  if (spot.startsAt || spot.endsAt) return !!spot.ended;
+  return new Date(spot.date).getTime() < Date.now();
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

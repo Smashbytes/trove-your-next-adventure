@@ -24,7 +24,7 @@ export function useAccountClosure(enabled = true) {
     enabled,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("my_account_closure" as never);
+      const { data, error } = await supabase.rpc("my_account_closure");
       if (error) throw error;
       const raw = (data ?? {}) as unknown as RawClosure;
       return { requestedAt: raw.requested_at ?? null, wipeAfter: raw.wipe_after ?? null, blockers: raw.blockers ?? [] };
@@ -37,7 +37,7 @@ export function useRequestAccountClosure() {
   const qc = useQueryClient();
   return useMutation<{ ok: boolean; wipeAfter: string | null; blockers: ClosureBlocker[] }, Error, string>({
     mutationFn: async (reason) => {
-      const { data, error } = await supabase.rpc("request_account_closure" as never, { p_reason: reason || null } as never);
+      const { data, error } = await supabase.rpc("request_account_closure", { p_reason: reason || undefined });
       if (error) throw error;
       const raw = data as unknown as { ok: boolean; wipe_after?: string | null; blockers?: ClosureBlocker[] };
       return { ok: !!raw.ok, wipeAfter: raw.wipe_after ?? null, blockers: raw.blockers ?? [] };
@@ -51,7 +51,7 @@ export function useCancelAccountClosure() {
   const qc = useQueryClient();
   return useMutation<boolean, Error, void>({
     mutationFn: async () => {
-      const { data, error } = await supabase.rpc("cancel_account_closure" as never);
+      const { data, error } = await supabase.rpc("cancel_account_closure");
       if (error) throw error;
       return !!data;
     },

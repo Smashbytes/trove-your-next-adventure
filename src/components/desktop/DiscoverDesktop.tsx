@@ -61,8 +61,7 @@ export function DiscoverDesktop() {
     city: activeCity,
     category: activeCat ?? undefined,
   });
-  const { data: friends = [] } = useFriends();
-  const crew = friends.filter((f) => f.status === "accepted");
+  const { friends: crew } = useFriends("accepted");
 
   // Same category source as the phone layout (the DB), so both show one list.
   const { names: dbCategories } = useTopLevelCategories();

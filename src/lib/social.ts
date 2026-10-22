@@ -8,10 +8,10 @@
 // localStorage store so the UI behaves identically; a signed-out real user who
 // tries to save/follow is prompted to sign in.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
-import { useIsDemo, prettifySlug } from "./listings-api";
+import { useIsDemo, prettifySlug, UUID_RE } from "./listings-api";
 import {
   getSaved,
   toggleSaved as toggleSavedLocal,
@@ -31,12 +31,10 @@ export function useSavedIds() {
     queryKey: ["saves", local, user?.id],
     queryFn: async () => {
       if (local) return getSaved();
-      const { data, error } = await supabase
-        .from("saves")
-        .select("listing_id")
-        .eq("user_id", user!.id);
-      if (error) throw error;
-      return (data ?? []).map((r) => r.listing_id);
+      const rows = await readAll((from, to) =>
+        supabase.from("saves").select("listing_id").eq("user_id", user!.id).order("listing_id").range(from, to),
+      );
+      return rows.map((r) => r.listing_id);
     },
   });
 }
@@ -95,12 +93,10 @@ export function useFollowedIds() {
     queryKey: ["follows", local, user?.id],
     queryFn: async () => {
       if (local) return getFollows();
-      const { data, error } = await supabase
-        .from("follows")
-        .select("host_id")
-        .eq("user_id", user!.id);
-      if (error) throw error;
-      return (data ?? []).map((r) => r.host_id);
+      const rows = await readAll((from, to) =>
+        supabase.from("follows").select("host_id").eq("user_id", user!.id).order("host_id").range(from, to),
+      );
+      return rows.map((r) => r.host_id);
     },
   });
 }
@@ -158,26 +154,60 @@ export interface FollowedHost {
   heroUrl: string | null;
 }
 
+const HOSTS_PAGE = 24;
+
+/** "My Spots": newest follows first, a page at a time (GST-L03-04). */
 export function useFollowedHosts() {
-  const { data: ids = [] } = useFollowedIds();
-  return useQuery<FollowedHost[]>({
-    queryKey: ["followed-hosts", [...ids].sort()],
-    enabled: ids.length > 0,
-    queryFn: async () => {
+  const demo = useIsDemo();
+  const { user } = useAuth();
+  const local = !user || demo;
+  return useInfiniteQuery({
+    queryKey: ["follows", "hosts", local, user?.id],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<{ hosts: FollowedHost[]; total: number }> => {
+      let ids: string[];
+      let total: number;
+      if (local) {
+        // Demo follows can be mock hosts, which aren't in the database.
+        const all = getFollows().filter((id) => UUID_RE.test(id));
+        total = all.length;
+        ids = all.slice(pageParam, pageParam + HOSTS_PAGE);
+      } else {
+        const { data, error, count } = await supabase
+          .from("follows")
+          .select("host_id", { count: "exact" })
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false })
+          .range(pageParam, pageParam + HOSTS_PAGE - 1);
+        if (error) throw error;
+        ids = (data ?? []).map((r) => r.host_id);
+        total = count ?? ids.length;
+      }
+      if (ids.length === 0) return { hosts: [], total };
       // Public Spot card only: host_profiles itself is readable by the Spot's own team.
       const { data, error } = await supabase
         .from("public_host_profiles")
         .select("user_id, slug, display_name, city, verified, hero_url")
         .in("user_id", ids);
       if (error) throw error;
-      return (data ?? []).filter((h) => h.user_id && h.slug).map((h) => ({
-        userId: h.user_id!,
-        slug: h.slug!,
-        name: h.display_name || prettifySlug(h.slug),
-        city: h.city,
-        verified: !!h.verified,
-        heroUrl: h.hero_url,
-      }));
+      const byId = new Map((data ?? []).map((h) => [h.user_id, h]));
+      const hosts = ids.flatMap((id) => {
+        const h = byId.get(id);
+        if (!h?.user_id || !h.slug) return [];
+        return [{
+          userId: h.user_id,
+          slug: h.slug,
+          name: h.display_name || prettifySlug(h.slug),
+          city: h.city,
+          verified: !!h.verified,
+          heroUrl: h.hero_url,
+        }];
+      });
+      return { hosts, total };
+    },
+    getNextPageParam: (last, pages) => {
+      const next = pages.length * HOSTS_PAGE;
+      return next < last.total ? next : undefined;
     },
   });
 }
@@ -187,6 +217,21 @@ export function useFollowedHosts() {
 // ---------------------------------------------------------------------------
 
 import type { QueryClient } from "@tanstack/react-query";
+
+/** The server returns at most 1,000 rows a request, so read a guest's own ids in pages. */
+async function readAll<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const STEP = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += STEP) {
+    const { data, error } = await page(from, from + STEP - 1);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if ((data ?? []).length < STEP) return out;
+  }
+}
+
 function getQuerySet(qc: QueryClient, key: unknown[]): Set<string> {
   const data = qc.getQueryData<string[]>(key);
   return new Set(data ?? []);

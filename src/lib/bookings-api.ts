@@ -6,7 +6,7 @@
 //
 // Paid bookings use TradeSafe hosted checkout; free/RSVP bookings stay in-app.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 import { useIsDemo, loadSpotsByIds } from "./listings-api";
@@ -126,7 +126,7 @@ async function edgeError(error: unknown): Promise<EdgeError> {
 /** Checkout errors that retrying won't fix: send the guest back to the spot. */
 export const DEAD_END_CHECKOUT_CODES = new Set([
   "sold_out", "slot_not_available", "tier_not_available", "listing_not_live",
-  "host_unavailable", "seller_escrow_not_ready",
+  "host_unavailable", "seller_escrow_not_ready", "event_ended",
 ]);
 
 interface DbBookingRow {
@@ -137,7 +137,8 @@ interface DbBookingRow {
   status: string;
   created_at: string;
   booking_fee_cents: number | null;
-  cancelled_by: "guest" | "host" | "trove" | null;
+  /** text + CHECK in the database: guest | host | trove. */
+  cancelled_by: string | null;
   cancel_reason: string | null;
   tickets: { code: string }[] | null;
   refunds: { amount_cents: number; status: string }[] | null;
@@ -154,7 +155,7 @@ async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
     status: dbStatusToView(r.status),
     ticketCode: r.tickets?.[0]?.code ?? "—",
     createdAt: r.created_at,
-    cancelledBy: r.cancelled_by ?? undefined,
+    cancelledBy: (r.cancelled_by ?? undefined) as BookingView["cancelledBy"],
     cancelReason: r.cancel_reason ?? undefined,
     bookingFee: centsToRand(r.booking_fee_cents ?? 0),
     refunded: centsToRand(
@@ -166,24 +167,35 @@ async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
 const BOOKING_SELECT =
   "id, listing_id, party_size, total_cents, booking_fee_cents, status, created_at, cancelled_by, cancel_reason, tickets(code), refunds(amount_cents, status)";
 
+const BOOKINGS_PAGE = 20;
+
+/** My Tickets: newest bookings first, a page at a time (GST-L03-03). */
 export function useMyBookings() {
   const demo = useIsDemo();
   const { user } = useAuth();
   const local = !user || demo;
-  return useQuery<BookingView[]>({
+  return useInfiniteQuery({
     queryKey: ["bookings", local, user?.id],
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<{ bookings: BookingView[]; total: number }> => {
       if (local) {
         const { getSpot } = await import("./spots");
-        return getBookings().map((b) => mockToView(b, getSpot(b.spotId) ?? null));
+        const all = getBookings().map((b) => mockToView(b, getSpot(b.spotId) ?? null));
+        return { bookings: pageParam === 0 ? all : [], total: all.length };
       }
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("bookings")
-        .select(BOOKING_SELECT)
+        .select(BOOKING_SELECT, { count: "exact" })
         .eq("guest_id", user!.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .range(pageParam, pageParam + BOOKINGS_PAGE - 1);
       if (error) throw error;
-      return loadLiveBookings((data ?? []) as unknown as DbBookingRow[]);
+      const bookings = await loadLiveBookings(data ?? []);
+      return { bookings, total: count ?? bookings.length };
+    },
+    getNextPageParam: (last, pages) => {
+      const next = pages.length * BOOKINGS_PAGE;
+      return next < last.total ? next : undefined;
     },
   });
 }
@@ -212,7 +224,7 @@ export function useBooking(id: string | undefined) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const [view] = await loadLiveBookings([data as unknown as DbBookingRow]);
+      const [view] = await loadLiveBookings([data]);
       return view ?? null;
     },
   });
@@ -383,7 +395,7 @@ export function useRefundQuote(bookingId: string | undefined, enabled = true) {
     // Tiers change with time; don't show a stale amount.
     staleTime: 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("refund_quote" as never, { p_booking_id: bookingId } as never);
+      const { data, error } = await supabase.rpc("refund_quote", { p_booking_id: bookingId! });
       if (error) throw rpcError(error);
       const q = data as unknown as Record<string, unknown>;
       return {
@@ -405,7 +417,7 @@ export function useCheckoutFees() {
     queryKey: ["checkout-fees"],
     staleTime: 10 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("checkout_fees" as never);
+      const { data, error } = await supabase.rpc("checkout_fees");
       if (error) throw error;
       return { bookingFee: centsToRand(Number((data as unknown as { booking_fee_cents?: number })?.booking_fee_cents ?? 0)) };
     },
@@ -433,7 +445,7 @@ export function useRequestRefund() {
   const qc = useQueryClient();
   return useMutation<void, Error, { bookingId: string; reason: string }>({
     mutationFn: async ({ bookingId, reason }) => {
-      const { error } = await supabase.rpc("request_refund" as never, { p_booking_id: bookingId, p_reason: reason } as never);
+      const { error } = await supabase.rpc("request_refund", { p_booking_id: bookingId, p_reason: reason });
       if (error) throw rpcError(error);
     },
     onSuccess: () => {
@@ -448,7 +460,7 @@ export function useWithdrawRefund() {
   const qc = useQueryClient();
   return useMutation<void, Error, string>({
     mutationFn: async (bookingId) => {
-      const { error } = await supabase.rpc("withdraw_refund_request" as never, { p_booking_id: bookingId } as never);
+      const { error } = await supabase.rpc("withdraw_refund_request", { p_booking_id: bookingId });
       if (error) throw rpcError(error);
     },
     onSuccess: () => {

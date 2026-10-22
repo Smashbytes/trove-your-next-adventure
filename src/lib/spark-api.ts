@@ -227,7 +227,7 @@ export function useDiscoverGroups(query: string) {
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("discover_groups", {
-        p_query: query.trim() || null,
+        p_query: query.trim() || undefined,
       });
       if (error) throw error;
       return (data ?? []).map((g) => ({

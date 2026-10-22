@@ -1,9 +1,10 @@
 import type { Friend } from "@/lib/spots";
 
-export function FriendStack({ friends, max = 3, size = 24 }: { friends: Friend[]; max?: number; size?: number }) {
+/** `total`: everyone going when `friends` is only the first few (friends_going p_limit). */
+export function FriendStack({ friends, total, max = 3, size = 24 }: { friends: Friend[]; total?: number; max?: number; size?: number }) {
   if (!friends.length) return null;
   const shown = friends.slice(0, max);
-  const extra = friends.length - shown.length;
+  const extra = Math.max(total ?? 0, friends.length) - shown.length;
   return (
     <div className="flex items-center gap-2">
       <div className="flex -space-x-2">

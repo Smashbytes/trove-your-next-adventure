@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
-import { ArrowLeft, Plus, LifeBuoy, Send, MessageSquare } from "lucide-react";
+import { ArrowLeft, Plus, LifeBuoy, Send, MessageSquare, ImagePlus, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useAuth } from "@/lib/auth";
 import {
@@ -10,6 +10,8 @@ import {
   useTicketNotes,
   useCreateTicket,
   useAddTicketNote,
+  useAttachmentLinks,
+  MAX_ATTACHMENTS,
   SUPPORT_CATEGORIES,
   type SupportTicket,
 } from "@/lib/support-api";
@@ -145,6 +147,7 @@ function NewTicket({
   const [category, setCategory] = useState<string>(SUPPORT_CATEGORIES[0].value);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
 
   async function submit() {
     if (title.trim().length < 4) {
@@ -152,7 +155,7 @@ function NewTicket({
       return;
     }
     try {
-      const t = await create.mutateAsync({ title, description, category });
+      const t = await create.mutateAsync({ title, description, category, files });
       toast.success("Request sent — we'll be in touch.");
       onCreated(t);
     } catch (e) {
@@ -216,6 +219,13 @@ function NewTicket({
           />
         </div>
 
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Photos <span className="normal-case tracking-normal">(optional, up to {MAX_ATTACHMENTS})</span>
+          </label>
+          <PhotoPicker files={files} onChange={setFiles} />
+        </div>
+
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -241,16 +251,22 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
   const { data: notes = [], isLoading } = useTicketNotes(ticket.id);
   const addNote = useAddTicketNote();
   const [reply, setReply] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
 
   async function send() {
     const value = reply.trim();
-    if (!value) return;
+    if (!value && files.length === 0) return;
+    const sent = files;
     setReply("");
+    setFiles([]);
     try {
-      await addNote.mutateAsync({ ticketId: ticket.id, content: value });
-    } catch {
-      toast.error("Couldn't send your message.");
+      // A reply needs some text; a photo-only reply says what it is.
+      const content = value || `Sent ${sent.length} photo${sent.length === 1 ? "" : "s"}`;
+      await addNote.mutateAsync({ ticketId: ticket.id, content, files: sent });
+    } catch (e) {
+      toast.error(friendlyError(e, "Couldn't send your message."));
       setReply(value);
+      setFiles(sent);
     }
   }
 
@@ -279,6 +295,11 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
             <p className="whitespace-pre-wrap text-sm text-foreground/90">{ticket.description}</p>
           </div>
         )}
+        {ticket.attachment_urls.length > 0 && (
+          <div className="border-b border-border/50 p-5">
+            <Attachments paths={ticket.attachment_urls} />
+          </div>
+        )}
 
         {/* Thread */}
         <div className="space-y-3 p-5">
@@ -305,6 +326,11 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
                     </p>
                   )}
                   <p className="whitespace-pre-wrap">{n.content}</p>
+                  {n.attachment_urls.length > 0 && (
+                    <div className="mt-2">
+                      <Attachments paths={n.attachment_urls} />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -312,7 +338,13 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
         </div>
 
         {/* Reply box */}
+        {files.length > 0 && (
+          <div className="border-t border-border/50 px-3 pt-3">
+            <PhotoPicker files={files} onChange={setFiles} compact />
+          </div>
+        )}
         <div className="flex items-center gap-2 border-t border-border/50 p-3">
+          <PhotoButton files={files} onChange={setFiles} />
           <input
             value={reply}
             onChange={(e) => setReply(e.target.value)}
@@ -322,7 +354,8 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
           />
           <button
             onClick={send}
-            disabled={addNote.isPending || !reply.trim()}
+            disabled={addNote.isPending || (!reply.trim() && files.length === 0)}
+            aria-label="Send"
             className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-brand text-primary-foreground shadow-glow-soft disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
@@ -330,6 +363,109 @@ function TicketThread({ ticket, onBack }: { ticket: SupportTicket; onBack: () =>
         </div>
       </div>
     </ResponsiveShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Photos
+// ---------------------------------------------------------------------------
+
+const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif";
+
+/** Adds picked images to `files`, keeping at most MAX_ATTACHMENTS. */
+function usePhotoInput(files: File[], onChange: (f: File[]) => void) {
+  const ref = useRef<HTMLInputElement>(null);
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    const images = picked.filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+    if (images.length < picked.length) toast.error("Only photos can be attached.");
+    const next = [...files, ...images];
+    if (next.length > MAX_ATTACHMENTS) toast.error(`Attach up to ${MAX_ATTACHMENTS} photos.`);
+    onChange(next.slice(0, MAX_ATTACHMENTS));
+  }
+  const input = (
+    <input ref={ref} type="file" accept={PHOTO_ACCEPT} multiple onChange={onPick} className="hidden" />
+  );
+  return { input, open: () => ref.current?.click(), full: files.length >= MAX_ATTACHMENTS };
+}
+
+function PhotoButton({ files, onChange }: { files: File[]; onChange: (f: File[]) => void }) {
+  const { input, open, full } = usePhotoInput(files, onChange);
+  return (
+    <>
+      {input}
+      <button
+        type="button"
+        onClick={open}
+        disabled={full}
+        aria-label={`Add photos (up to ${MAX_ATTACHMENTS})`}
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-elevated text-muted-foreground ring-1 ring-border transition hover:text-foreground disabled:opacity-40"
+      >
+        <ImagePlus className="h-4 w-4" />
+      </button>
+    </>
+  );
+}
+
+/** Thumbnails of picked photos, each removable, plus an add tile. */
+function PhotoPicker({ files, onChange, compact }: { files: File[]; onChange: (f: File[]) => void; compact?: boolean }) {
+  const { input, open, full } = usePhotoInput(files, onChange);
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+  const size = compact ? "h-14 w-14" : "h-20 w-20";
+  return (
+    <div className="flex flex-wrap gap-2">
+      {input}
+      {files.map((f, i) => (
+        <div key={`${f.name}-${i}`} className={`relative ${size} overflow-hidden rounded-xl bg-surface-elevated ring-1 ring-border`}>
+          {/* HEIC won't preview outside Safari: the file name shows through instead. */}
+          <span className="absolute inset-0 grid place-items-center break-all p-1 text-center text-2xs text-muted-foreground">{f.name}</span>
+          <img
+            src={previews[i]}
+            alt={f.name}
+            className="relative h-full w-full object-cover"
+            onError={(e) => (e.currentTarget.style.display = "none")}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(files.filter((_, j) => j !== i))}
+            aria-label={`Remove ${f.name}`}
+            className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ))}
+      {!full && !compact && (
+        <button
+          type="button"
+          onClick={open}
+          className={`grid ${size} place-items-center rounded-xl border border-dashed border-border bg-surface-elevated text-muted-foreground transition hover:text-foreground`}
+          aria-label={`Add photos (up to ${MAX_ATTACHMENTS})`}
+        >
+          <ImagePlus className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Attached photos on a request or reply, opened full size in a new tab. */
+function Attachments({ paths }: { paths: string[] }) {
+  const { data: links = {} } = useAttachmentLinks(paths);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {paths.map((p, i) =>
+        links[p] ? (
+          <a key={p} href={links[p]} target="_blank" rel="noopener noreferrer" className="block h-16 w-16 overflow-hidden rounded-lg ring-1 ring-border">
+            <img src={links[p]} alt={`Attachment ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+          </a>
+        ) : (
+          <div key={p} className="h-16 w-16 animate-pulse rounded-lg bg-surface-elevated" />
+        ),
+      )}
+    </div>
   );
 }
 

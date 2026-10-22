@@ -32,10 +32,12 @@ import { toastError } from "@/lib/errors";
 export function SpotDetailDesktop({
   spot,
   friendsGoing,
+  friendsGoingTotal,
   onShare,
 }: {
   spot: Spot;
   friendsGoing: Friend[];
+  friendsGoingTotal?: number;
   onShare: () => void;
 }) {
   const navigate = useNavigate();
@@ -63,6 +65,7 @@ export function SpotDetailDesktop({
   }
 
   function book() {
+    if (spot.ended) return;
     let split: { participants: SplitParticipant[]; perPerson: number } | undefined;
     if (pickedFriends.length > 0) {
       const participants: SplitParticipant[] = [
@@ -183,7 +186,7 @@ export function SpotDetailDesktop({
                   </button>
                 </div>
                 <div className="mt-3">
-                  <FriendStack friends={friendsGoing} max={6} size={34} />
+                  <FriendStack friends={friendsGoing} total={friendsGoingTotal} max={6} size={34} />
                 </div>
               </section>
             )}
@@ -232,6 +235,7 @@ export function SpotDetailDesktop({
                   </div>
                 )}
 
+                {!spot.ended && (<>
                 <div className="mt-4 flex items-center justify-between rounded-2xl bg-surface-elevated p-2 ring-1 ring-border">
                   <span className="pl-2 text-sm font-medium text-muted-foreground">Tickets</span>
                   <div className="flex items-center rounded-full bg-surface ring-1 ring-border">
@@ -249,14 +253,22 @@ export function SpotDetailDesktop({
                     {formatPrice(pickedFriends.length > 0 ? perPerson : total)}
                   </span>
                 </div>
+                </>)}
 
-                <button
-                  onClick={book}
-                  disabled={optionsLoading}
-                  className="mt-4 w-full rounded-full bg-gradient-brand py-3.5 text-sm font-bold text-primary-foreground shadow-glow transition active:scale-[0.98] disabled:opacity-50"
-                >
-                  Book now
-                </button>
+                {spot.ended ? (
+                  <div role="status" className="mt-4 rounded-2xl bg-surface-elevated p-4 text-center ring-1 ring-border">
+                    <p className="font-display text-base">This event has ended</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Bookings are closed. Follow the Spot to hear about their next one.</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={book}
+                    disabled={optionsLoading}
+                    className="mt-4 w-full rounded-full bg-gradient-brand py-3.5 text-sm font-bold text-primary-foreground shadow-glow transition active:scale-[0.98] disabled:opacity-50"
+                  >
+                    Book now
+                  </button>
+                )}
 
                 {/* Live split payments are off until TradeSafe wallet settlement is certified. */}
                 {demo && friendsGoing.length > 0 && (

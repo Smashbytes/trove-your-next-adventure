@@ -13,8 +13,7 @@ function avatarHue(seed: string): number {
 
 export function RightRail({ trending }: { trending: Spot[] }) {
   const { isAuthenticated } = useAuth();
-  const { data: friends = [] } = useFriends();
-  const crew = friends.filter((f) => f.status === "accepted");
+  const { friends: crew } = useFriends("accepted");
   const top = trending.slice(0, 5);
 
   return (

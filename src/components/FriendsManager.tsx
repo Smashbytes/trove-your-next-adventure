@@ -8,18 +8,20 @@ import {
   useRespondFriend,
   useRemoveFriend,
 } from "@/lib/friends-api";
+import { LoadMore } from "@/components/LoadMore";
 
 /** Self-contained friends list + lookup. Drop in anywhere (Profile, Settings). */
 export function FriendsManager({ heading = true }: { heading?: boolean }) {
-  const { data: friends = [] } = useFriends();
+  const acceptedList = useFriends("accepted");
+  const pendingList = useFriends("pending");
   const addFriend = useAddFriend();
   const respond = useRespondFriend();
   const remove = useRemoveFriend();
   const [email, setEmail] = useState("");
 
-  const accepted = friends.filter((f) => f.status === "accepted");
-  const incoming = friends.filter((f) => f.status === "pending" && !f.requestedByMe);
-  const outgoing = friends.filter((f) => f.status === "pending" && f.requestedByMe);
+  const accepted = acceptedList.friends;
+  const incoming = pendingList.friends.filter((f) => !f.requestedByMe);
+  const outgoing = pendingList.friends.filter((f) => f.requestedByMe);
 
   async function add() {
     const value = email.trim();
@@ -103,6 +105,7 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
               </button>
             </div>
           ))}
+          <LoadMore hasMore={acceptedList.hasMore} loading={acceptedList.loadingMore} onClick={acceptedList.loadMore} />
         </div>
       ) : (
         incoming.length === 0 && (
@@ -124,6 +127,10 @@ export function FriendsManager({ heading = true }: { heading?: boolean }) {
             </div>
           ))}
         </div>
+      )}
+      {/* Requests both ways share one paged list. */}
+      {pendingList.hasMore && (
+        <LoadMore hasMore loading={pendingList.loadingMore} onClick={pendingList.loadMore} label="More requests" />
       )}
     </section>
   );

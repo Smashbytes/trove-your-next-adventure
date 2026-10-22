@@ -2,7 +2,8 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowLeft, BadgeCheck, MapPin, Share2, Users, Calendar, Sparkles, Navigation } from "lucide-react";
 import { formatDate, formatTime, formatPrice } from "@/lib/format";
-import { useHostBySlug } from "@/lib/listings-api";
+import { useHostBySlug, useHostSpots } from "@/lib/listings-api";
+import { LoadMore } from "@/components/LoadMore";
 import { useFollowedIds, useToggleFollow } from "@/lib/social";
 import { openDirections } from "@/lib/maps";
 import { shareLink } from "@/lib/share";
@@ -20,6 +21,9 @@ export const Route = createFileRoute("/host/$slug")({
 function HostPage() {
   const { slug } = useParams({ from: "/host/$slug" });
   const { data: host, isLoading } = useHostBySlug(slug);
+  const hostSpots = useHostSpots(host);
+  const spots = hostSpots.data?.pages.flatMap((p) => p.spots) ?? [];
+  const spotsTotal = hostSpots.data?.pages[0]?.total ?? 0;
   const { data: followedIds = [] } = useFollowedIds();
   const toggleFollow = useToggleFollow();
   const following = !!host && followedIds.includes(host.userId);
@@ -49,8 +53,8 @@ function HostPage() {
     return <NotFoundState title="This Spot isn't on TROVE" body="Check the link, or find something else to do on Discover." />;
   }
 
-  const cover = host.heroUrl ?? host.spots[0]?.image;
-  const mapPoints = host.spots
+  const cover = host.heroUrl ?? spots[0]?.image;
+  const mapPoints = spots
     .filter((e) => e.lat && e.lng)
     .map((e) => ({ lat: e.lat, lng: e.lng, label: e.name, sublabel: e.area || e.city }));
 
@@ -98,7 +102,7 @@ function HostPage() {
 
         {/* Stats */}
         <section className="grid grid-cols-2 gap-2 text-center">
-          <Stat label="Events" value={host.spots.length} />
+          <Stat label="Events" value={spotsTotal} />
           <Stat label="City" value={host.city ?? "—"} />
         </section>
 
@@ -127,23 +131,27 @@ function HostPage() {
               <Calendar className="h-4 w-4 text-primary" /> Upcoming events
             </h2>
             <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              {host.spots.length} {host.spots.length === 1 ? "event" : "events"}
+              {spotsTotal} {spotsTotal === 1 ? "event" : "events"}
             </span>
           </div>
 
-          {host.spots.length === 0 ? (
+          {hostSpots.isLoading ? (
+            <div className="grid grid-cols-2 gap-2">
+              {[0, 1].map((i) => <div key={i} className="aspect-square animate-pulse rounded-2xl bg-surface" />)}
+            </div>
+          ) : spots.length === 0 ? (
             <div className="rounded-2xl bg-surface ring-1 ring-border p-8 text-center text-sm text-muted-foreground inline-flex flex-col items-center gap-2 w-full">
               <Sparkles className="h-5 w-5 text-primary" />
               No live events right now. Follow to get notified.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {host.spots.map((e, i) => (
+              {spots.map((e, i) => (
                 <motion.div
                   key={e.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{ delay: (i % 24) * 0.05 }}
                 >
                   <Link
                     to="/spot/$id"
@@ -177,6 +185,12 @@ function HostPage() {
               ))}
             </div>
           )}
+          <LoadMore
+            hasMore={hostSpots.hasNextPage}
+            loading={hostSpots.isFetchingNextPage}
+            onClick={() => hostSpots.fetchNextPage()}
+            label="More events"
+          />
         </section>
 
         {/* Locations — tap to open directions in the native map app */}

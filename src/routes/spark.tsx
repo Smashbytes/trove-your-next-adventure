@@ -30,6 +30,7 @@ import {
   type GuestResult,
 } from "@/lib/spark-api";
 import { useFriends } from "@/lib/friends-api";
+import { LoadMore } from "@/components/LoadMore";
 
 export const Route = createFileRoute("/spark")({
   head: () => ({ meta: [{ title: "Spark — TROVE" }] }),
@@ -525,7 +526,7 @@ function GroupRow({ group, open, onToggle, isOwner }: {
 function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean }) {
   const { user } = useAuth();
   const { data: members = [] } = useGroupMembers(group.id);
-  const { data: friends = [] } = useFriends();
+  const accepted = useFriends("accepted");
   const invite = useInviteToGroup();
   const leave = useLeaveGroup();
   const update = useUpdateGroup();
@@ -533,7 +534,7 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
   const [inviting, setInviting] = useState(false);
 
   const memberIds = new Set(members.map((m) => m.userId));
-  const invitable = friends.filter((f) => f.status === "accepted" && !memberIds.has(f.friendId));
+  const invitable = accepted.friends.filter((f) => !memberIds.has(f.friendId));
 
   return (
     <div className="space-y-3 border-t border-border/60 p-3">
@@ -593,6 +594,7 @@ function GroupDetail({ group, isOwner }: { group: GroupSummary; isOwner: boolean
                   </div>
                 ))
               )}
+              <LoadMore hasMore={accepted.hasMore} loading={accepted.loadingMore} onClick={accepted.loadMore} label="More friends" />
             </div>
           )}
           {group.isPrivate && (

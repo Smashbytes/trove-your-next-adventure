@@ -97,6 +97,10 @@ function CheckoutPage() {
     );
   }
   if (!spot) return <NotFoundState />;
+  // The server refuses it too (event_ended); don't let the guest fill in the form first.
+  if (spot.ended && step === "details") {
+    return <NotFoundState title="This event has ended" body="Bookings are closed. Find something else to do on Discover." />;
+  }
   if (!isAuthenticated) return <AuthRequired onSignIn={openAuthModal} spotId={id} />;
   if (!intent) return <div className="p-10 text-center text-muted-foreground" role="status">Loading checkout…</div>;
 

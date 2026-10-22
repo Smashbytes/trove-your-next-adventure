@@ -16,8 +16,9 @@
 //     listing editor. We read them defensively and degrade when absent.
 //   * Editor's picks come from the curated_listings table (wired separately).
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { supabase } from "./supabase";
+import { queryClient } from "./query-client";
 import { useAuth } from "./auth";
 import type {
   Category as DbCategory,
@@ -44,7 +45,26 @@ export const FEATURED_TTL_MS = 48 * 60 * 60 * 1000;
 const LISTING_COLUMNS =
   "id, host_id, category_id, title, description, status, booking_mode, base_price_cents, capacity, " +
   "lat, lng, address, city, amenities, cover_url, metadata, created_at, listing_type, capacity_booked, " +
-  "custom_questions, refund_policy, rating_avg, review_count, cancelled_at";
+  "custom_questions, refund_policy, rating_avg, review_count, cancelled_at, starts_at, ends_at";
+
+/** Cards per page on lists that load more as you go (Saved, a Spot's page). */
+export const PAGE_SIZE = 24;
+
+/**
+ * PostgREST `or` filter: still on sale, i.e. the event's end (or its start
+ * when no end is set) is in the future, or it's a venue with no date at all.
+ * Mirrors reserve_booking's EVENT_ENDED check (GST-L03-01).
+ */
+function notEndedFilter(): string {
+  const now = new Date().toISOString();
+  return `ends_at.gt.${now},and(ends_at.is.null,starts_at.is.null),and(ends_at.is.null,starts_at.gt.${now})`;
+}
+
+/** Same rule as notEndedFilter, for a row already loaded. */
+export function hasEnded(startsAt: string | null | undefined, endsAt: string | null | undefined): boolean {
+  const end = endsAt ?? startsAt;
+  return !!end && new Date(end).getTime() < Date.now();
+}
 
 // ---------------------------------------------------------------------------
 // Demo mode
@@ -106,14 +126,13 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
   const meta = (row.metadata ?? {}) as ListingMetadata;
   const cat = row.category_id ? extras.categories.get(row.category_id) : undefined;
   const parent = cat?.parentId ? extras.categories.get(cat.parentId) : undefined;
-  // Aggregated by the database (GST-L02-11), not averaged here from review rows.
-  const agg = row as unknown as { rating_avg?: number | null; review_count?: number | null };
   const hostSlug = extras.hostSlugById.get(row.host_id) ?? "";
   const hostName = extras.hostNameById?.get(row.host_id) || prettifySlug(hostSlug);
 
   const metaDate = (meta as { date?: string }).date;
   const nextSlot = extras.nextSlotByListing?.get(row.id);
-  const date = metaDate || nextSlot || row.created_at;
+  // listings.starts_at is the event date (SHR-L03-03); metadata.date is legacy.
+  const date = row.starts_at || metaDate || nextSlot || row.created_at;
 
   return {
     id: row.id,
@@ -129,8 +148,9 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     date,
     doors: (meta as { doors_open?: string }).doors_open ?? "",
     price: centsToRand(row.base_price_cents),
-    rating: agg.rating_avg != null ? Math.round(Number(agg.rating_avg) * 10) / 10 : 0,
-    reviews: Number(agg.review_count ?? 0),
+    // Aggregated by the database (GST-L02-11), not averaged here from review rows.
+    rating: row.rating_avg != null ? Math.round(Number(row.rating_avg) * 10) / 10 : 0,
+    reviews: Number(row.review_count ?? 0),
     image: row.cover_url || FALLBACK_IMAGE,
     imageFallback: FALLBACK_IMAGE,
     capacityBooked: row.capacity_booked ?? 0,
@@ -144,10 +164,13 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     lat: row.lat ?? 0,
     lng: row.lng ?? 0,
     tags: meta.tags ?? row.amenities ?? [],
-    customQuestions: (row as unknown as { custom_questions?: Spot["customQuestions"] }).custom_questions ?? [],
+    customQuestions: (row.custom_questions as unknown as Spot["customQuestions"]) ?? [],
     bookingMode: row.booking_mode ?? undefined,
     rooms: readRooms(meta),
-    refundPolicy: (row as unknown as { refund_policy?: string }).refund_policy ?? undefined,
+    refundPolicy: row.refund_policy ?? undefined,
+    startsAt: row.starts_at ?? undefined,
+    endsAt: row.ends_at ?? undefined,
+    ended: hasEnded(row.starts_at, row.ends_at),
   };
 }
 
@@ -169,7 +192,16 @@ function readRooms(meta: ListingMetadata): Spot["rooms"] {
 // Shared fetch of the bits needed to enrich a set of listing rows
 // ---------------------------------------------------------------------------
 
-async function fetchCategories(): Promise<Map<string, CategoryNode>> {
+/** Categories change rarely: one cached copy serves every list (GST-L03-09). */
+function fetchCategories(): Promise<Map<string, CategoryNode>> {
+  return queryClient.fetchQuery({
+    queryKey: [...listingKeys.categories, "map"],
+    queryFn: loadCategories,
+    staleTime: 10 * 60_000,
+  });
+}
+
+async function loadCategories(): Promise<Map<string, CategoryNode>> {
   const { data, error } = await supabase
     .from("categories")
     .select("id, name, parent_id")
@@ -211,7 +243,6 @@ export const listingKeys = {
   all: ["listings"] as const,
   list: (filters: ListingFilters) => ["listings", "list", filters] as const,
   detail: (id: string | undefined) => ["listings", "detail", id] as const,
-  reviews: (id: string | undefined) => ["listings", "reviews", id] as const,
   host: (slug: string | undefined) => ["host", slug] as const,
   categories: ["categories"] as const,
 };
@@ -280,6 +311,9 @@ export function useListings(filters: ListingFilters = {}) {
         .from("listings_with_capacity")
         .select(LISTING_COLUMNS)
         .eq("status", "live")
+        .or(notEndedFilter())
+        // Soonest events first; venues (no date) after, newest first.
+        .order("starts_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(filters.limit ?? 60);
 
@@ -294,17 +328,21 @@ export function useListings(filters: ListingFilters = {}) {
           config: "english",
         });
       }
+      if (filters.category && filters.category !== "All") {
+        // A card's category is its top-level name, so a chip matches that
+        // category and its children. Filtered here, before the limit, so the
+        // chip shows the whole category and not a slice of the newest 60.
+        const categories = await fetchCategories();
+        const ids = [...categories.values()]
+          .filter((c) => (c.parentId ? categories.get(c.parentId)?.name : c.name) === filters.category)
+          .map((c) => c.id);
+        if (ids.length === 0) return [];
+        q = q.in("category_id", ids);
+      }
 
       const { data, error } = await q;
       if (error) throw error;
-      const rows = (data ?? []) as unknown as ListingWithCapacity[];
-      const spots = await enrichListings(rows);
-
-      // Category filter applied post-enrichment (matches resolved display name).
-      if (filters.category && filters.category !== "All") {
-        return spots.filter((s) => s.category === filters.category);
-      }
-      return spots;
+      return enrichListings((data ?? []) as unknown as ListingWithCapacity[]);
     },
   });
 }
@@ -324,6 +362,7 @@ export function useListing(id: string | undefined) {
         .select(LISTING_COLUMNS)
         .eq("id", id!)
         .eq("status", "live")
+        // Ended events stay readable here: the page says "This event has ended".
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
@@ -349,51 +388,60 @@ export async function loadSpotsByIds(ids: string[], demo: boolean): Promise<Map<
     }
     return map;
   }
-  const { data, error } = await supabase
-    .from("listings_with_capacity")
-    .select(LISTING_COLUMNS)
-    .in("id", ids);
-  if (error) throw error;
-  const spots = await enrichListings((data ?? []) as unknown as ListingWithCapacity[]);
+  // Every id goes into the URL, and PostgREST refuses past ~678 of them
+  // (GST-L03-04), so ask in batches.
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += ID_BATCH) batches.push(ids.slice(i, i + ID_BATCH));
+  const results = await Promise.all(
+    batches.map((batch) => supabase.from("listings_with_capacity").select(LISTING_COLUMNS).in("id", batch)),
+  );
+  const rows: ListingWithCapacity[] = [];
+  for (const { data, error } of results) {
+    if (error) throw error;
+    rows.push(...((data ?? []) as unknown as ListingWithCapacity[]));
+  }
+  const spots = await enrichListings(rows);
   for (const s of spots) map.set(s.id, s);
   return map;
 }
 
-/** Resolve a set of listing ids to Spots (for the Saved page). */
-export function useSpotsByIds(ids: string[]) {
+/** Ids per `.in()` request: keeps the URL far below the server's limit. */
+const ID_BATCH = 100;
+
+/** The Saved page: newest saves first, a page at a time. */
+export function useSavedSpots() {
   const demo = useIsDemo();
-  return useQuery<Spot[]>({
-    queryKey: ["spots-by-ids", demo, [...ids].sort()],
-    queryFn: async () => {
+  const { user } = useAuth();
+  const local = !user || demo;
+  return useInfiniteQuery({
+    queryKey: ["saves", "spots", local, user?.id],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<{ spots: Spot[]; total: number }> => {
+      let ids: string[];
+      let total: number;
+      if (local) {
+        // Demo + signed-out saves live in this browser (store.ts).
+        const all = (await import("./store")).getSaved();
+        total = all.length;
+        ids = all.slice(pageParam, pageParam + PAGE_SIZE);
+      } else {
+        const { data, error, count } = await supabase
+          .from("saves")
+          .select("listing_id", { count: "exact" })
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false })
+          .range(pageParam, pageParam + PAGE_SIZE - 1);
+        if (error) throw error;
+        ids = (data ?? []).map((r) => r.listing_id);
+        total = count ?? ids.length;
+      }
       const map = await loadSpotsByIds(ids, demo);
-      // Preserve incoming order.
-      return ids.map((id) => map.get(id)).filter((s): s is Spot => !!s);
+      // Keep save order; a save whose listing is gone simply doesn't show.
+      return { spots: ids.map((id) => map.get(id)).filter((s): s is Spot => !!s), total };
     },
-  });
-}
-
-export interface ListingReview {
-  id: string;
-  rating: number;
-  body: string | null;
-  created_at: string;
-}
-
-export function useListingReviews(listingId: string | undefined) {
-  const demo = useIsDemo();
-  return useQuery<ListingReview[]>({
-    queryKey: [...listingKeys.reviews(listingId), demo],
-    enabled: !!listingId,
-    queryFn: async () => {
-      if (demo || !UUID_RE.test(listingId!)) return [];
-      const { data, error } = await supabase
-        .from("reviews")
-        .select("id, rating, body, created_at")
-        .eq("of_listing", listingId!)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return (data ?? []) as ListingReview[];
+    getNextPageParam: (last, pages) => {
+      const next = pages.length * PAGE_SIZE;
+      return next < last.total ? next : undefined;
     },
   });
 }
@@ -406,7 +454,6 @@ export interface HostBundle {
   heroUrl: string | null;
   city: string | null;
   verified: boolean;
-  spots: Spot[];
 }
 
 /**
@@ -442,8 +489,8 @@ export function useEditorsPicks(limit = 5) {
       const ids = (data ?? []).map((r) => r.listing_id);
       if (ids.length === 0) return [];
       const map = await loadSpotsByIds(ids, false);
-      // Preserve the curator's order; drop any that no longer resolve.
-      return ids.map((id) => map.get(id)).filter((s): s is Spot => !!s);
+      // Preserve the curator's order; drop any that no longer resolve or ended.
+      return ids.map((id) => map.get(id)).filter((s): s is Spot => !!s && !s.ended);
     },
   });
 }
@@ -465,7 +512,6 @@ export function useHostBySlug(slug: string | undefined) {
           heroUrl: h.events[0]?.image ?? null,
           city: h.city,
           verified: true,
-          spots: h.events,
         };
       }
       const { data: host, error: hErr } = await supabase
@@ -475,16 +521,6 @@ export function useHostBySlug(slug: string | undefined) {
         .maybeSingle();
       if (hErr) throw hErr;
       if (!host?.user_id || !host.slug) return null;
-
-      const { data: listings, error: lErr } = await supabase
-        .from("listings_with_capacity")
-        .select(LISTING_COLUMNS)
-        .eq("host_id", host.user_id)
-        .eq("status", "live")
-        .order("created_at", { ascending: false });
-      if (lErr) throw lErr;
-
-      const spots = await enrichListings((listings ?? []) as unknown as ListingWithCapacity[]);
       return {
         slug: host.slug,
         userId: host.user_id,
@@ -493,8 +529,39 @@ export function useHostBySlug(slug: string | undefined) {
         heroUrl: host.hero_url,
         city: host.city,
         verified: !!host.verified,
-        spots,
       };
+    },
+  });
+}
+
+/** A Spot's live listings, soonest first, ended events left out, a page at a time. */
+export function useHostSpots(host: HostBundle | null | undefined) {
+  const demo = useIsDemo();
+  return useInfiniteQuery({
+    queryKey: [...listingKeys.host(host?.slug), "spots", demo],
+    enabled: !!host,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<{ spots: Spot[]; total: number }> => {
+      if (demo) {
+        const events = (await loadMock()).getHost(host!.slug)?.events ?? [];
+        return { spots: pageParam === 0 ? events : [], total: events.length };
+      }
+      const { data, error, count } = await supabase
+        .from("listings_with_capacity")
+        .select(LISTING_COLUMNS, { count: "exact" })
+        .eq("host_id", host!.userId)
+        .eq("status", "live")
+        .or(notEndedFilter())
+        .order("starts_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .range(pageParam, pageParam + PAGE_SIZE - 1);
+      if (error) throw error;
+      const spots = await enrichListings((data ?? []) as unknown as ListingWithCapacity[]);
+      return { spots, total: count ?? spots.length };
+    },
+    getNextPageParam: (last, pages) => {
+      const next = pages.length * PAGE_SIZE;
+      return next < last.total ? next : undefined;
     },
   });
 }
