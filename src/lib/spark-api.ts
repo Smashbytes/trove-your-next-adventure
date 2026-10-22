@@ -461,7 +461,13 @@ type SplitInboxPage = { items: SplitInboxItem[]; total: number };
 /** Splits that need the user now (respond or pay), newest first, a page at a time. */
 export function useSplitInbox() {
   const { user } = useAuth();
-  const q = useInfiniteQuery<SplitInboxPage, Error, InfiniteData<SplitInboxPage>, (string | undefined)[], number>({
+  const q = useInfiniteQuery<
+    SplitInboxPage,
+    Error,
+    InfiniteData<SplitInboxPage>,
+    (string | undefined)[],
+    number
+  >({
     queryKey: ["split-inbox", user?.id],
     enabled: !!user,
     initialPageParam: 0,
