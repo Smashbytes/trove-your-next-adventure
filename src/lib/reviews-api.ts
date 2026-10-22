@@ -45,16 +45,17 @@ export function useSubmitReview() {
   return useMutation<void, Error, { bookingId: string; listingId: string; rating: number; body: string }>({
     mutationFn: async ({ bookingId, rating, body }) => {
       if (!user) throw new Error("Sign in to leave a review.");
-      const { error } = await supabase.rpc("submit_review" as never, {
+      const { error } = await supabase.rpc("submit_review", {
         p_booking_id: bookingId,
         p_rating: rating,
-        p_body: body.trim() || null,
-      } as never);
+        p_body: body.trim() || undefined,
+      });
       if (error) throw new Error(REVIEW_ERRORS[(error.message ?? "").trim()] ?? error.message);
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["booking-review", v.bookingId] });
-      qc.invalidateQueries({ queryKey: ["listings", "reviews", v.listingId] });
+      // The Spot's rating and review count come from the listing view.
+      qc.invalidateQueries({ queryKey: ["listings", "detail", v.listingId] });
     },
   });
 }

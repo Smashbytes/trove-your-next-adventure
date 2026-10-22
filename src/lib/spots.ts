@@ -82,6 +82,11 @@ export interface Spot {
   rooms?: Array<{ name: string; capacity?: number; price: number }>;
   /** listings.refund_policy: "standard" | "7d" | "30d" | "none" (0038). */
   refundPolicy?: string;
+  /** listings.starts_at / ends_at for events (live data). */
+  startsAt?: string;
+  endsAt?: string;
+  /** The event is over: not bookable (reserve_booking refuses EVENT_ENDED). */
+  ended?: boolean;
 }
 
 export interface CustomQuestion {

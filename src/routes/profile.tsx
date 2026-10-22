@@ -19,6 +19,7 @@ import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useMyBookings } from "@/lib/bookings-api";
+import { toJpeg, UnreadableImageError } from "@/lib/image";
 import { useSavedIds } from "@/lib/social";
 import { useFriends } from "@/lib/friends-api";
 
@@ -29,11 +30,10 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const { profile, user, isAuthenticated, signOut, openAuthModal, refreshProfile } = useAuth();
-  const { data: bookings = [] } = useMyBookings();
+  const { data: bookingPages } = useMyBookings();
+  const bookingCount = bookingPages?.pages[0]?.total ?? 0;
   const { data: savedIds = [] } = useSavedIds();
-  const { data: friends = [] } = useFriends();
-
-  const accepted = friends.filter((f) => f.status === "accepted");
+  const { total: friendCount } = useFriends("accepted");
 
   const displayName = profile?.full_name?.trim() || user?.email?.split("@")[0] || "Guest";
   const initial = displayName.charAt(0).toUpperCase();
@@ -81,21 +81,39 @@ function ProfilePage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || !user) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Pick an image under 5MB.");
+    // The camera's original can be any size or format; what's stored is a
+    // 512px JPEG at one fixed path, so a new photo replaces the old one.
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("That file is too big. Pick a photo under 25MB.");
       return;
     }
     setUploading(true);
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `${user.id}/avatar.${ext}`;
+    let jpeg: Blob;
+    try {
+      jpeg = await toJpeg(file, 512);
+    } catch (err) {
+      setUploading(false);
+      toast.error(
+        err instanceof UnreadableImageError
+          ? "We can't open that file. Pick a JPEG, PNG, WebP or GIF photo."
+          : "Couldn't prepare your photo. Please try again.",
+      );
+      return;
+    }
+    const path = `${user.id}/avatar.jpg`;
     const { error: upErr } = await supabase.storage
       .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
+      .upload(path, jpeg, { upsert: true, contentType: "image/jpeg" });
     if (upErr) {
       setUploading(false);
       toast.error("Couldn't upload your photo. Please try again.");
       return;
     }
+    // Photos from before this used the file's own extension (avatar.png…):
+    // remove those so only the current one stays public. Best effort.
+    const { data: old } = await supabase.storage.from("avatars").list(user.id);
+    const stale = (old ?? []).map((o) => `${user.id}/${o.name}`).filter((p) => p !== path);
+    if (stale.length > 0) await supabase.storage.from("avatars").remove(stale);
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     const publicUrl = `${data.publicUrl}?v=${Date.now()}`; // bust cache
     const { error: updErr } = await supabase
@@ -179,7 +197,7 @@ function ProfilePage() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
               onChange={onPickAvatar}
               className="hidden"
             />
@@ -226,9 +244,9 @@ function ProfilePage() {
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <Stat label="Tickets" value={bookings.length} />
+            <Stat label="Tickets" value={bookingCount} />
             <Stat label="Saved" value={savedIds.length} />
-            <Stat label="Friends" value={accepted.length} />
+            <Stat label="Friends" value={friendCount} />
           </div>
         </section>
 

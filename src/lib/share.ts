@@ -116,11 +116,7 @@ export function spotOgMeta(og: SpotOg) {
  */
 export async function guestShareUrl(listingId: string, signedIn: boolean): Promise<string> {
   if (!signedIn) return spotUrl(listingId);
-  // get_share_link isn't in the generated types yet (migration 0027).
-  const { data, error } = await (supabase.rpc as unknown as (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: { code: string } | null; error: unknown }>)("get_share_link", {
+  const { data, error } = await supabase.rpc("get_share_link", {
     p_listing_id: listingId,
     p_channel: "link",
     p_kind: "guest",
@@ -168,10 +164,7 @@ function peekShareRef(listingId: string): string | null {
 export async function attributeBookingShare(bookingId: string, listingId: string): Promise<void> {
   const code = peekShareRef(listingId);
   if (!code) return;
-  const { error } = await (supabase.rpc as unknown as (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: boolean | null; error: unknown }>)("attribute_booking_share", {
+  const { error } = await supabase.rpc("attribute_booking_share", {
     p_booking_id: bookingId,
     p_code: code,
   });

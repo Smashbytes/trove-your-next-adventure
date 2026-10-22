@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Check, UserPlus, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { useAuth } from "@/lib/auth";
 import {
   useNotifications,
+  useOlderNotifications,
+  LIVE_LIMIT,
   useMarkAllRead,
   describeNotification,
   notificationSpec,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/notifications-api";
 import { useFriends, useRespondFriend } from "@/lib/friends-api";
 import { toastError } from "@/lib/errors";
+import { LoadMore } from "@/components/LoadMore";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({ meta: [{ title: "Notifications — TROVE" }] }),
@@ -48,11 +51,15 @@ function NotificationsPage() {
 
 function NotificationsInner() {
   const { data: notifs = [], isLoading } = useNotifications();
-  const { data: friends = [] } = useFriends();
+  const pending = useFriends("pending");
   const respond = useRespondFriend();
   const markAll = useMarkAllRead();
 
-  const requests = friends.filter((f) => f.status === "pending" && !f.requestedByMe);
+  const requests = pending.friends.filter((f) => !f.requestedByMe);
+  // Past the live newest 50, older rows load on request.
+  const [showOlder, setShowOlder] = useState(false);
+  const older = useOlderNotifications(notifs[notifs.length - 1]?.created_at, showOlder);
+  const olderRows = older.data?.pages.flat() ?? [];
   const hasUnread = notifs.some((n) => !n.read_at);
 
   // Mark notifications read on view (friend requests stay actionable).
@@ -64,7 +71,7 @@ function NotificationsInner() {
   // A pending request is rendered as an actionable card from the friends graph,
   // so its notification row would be a duplicate of the same thing.
   const pendingFrom = new Set(requests.map((r) => r.friendId));
-  const rows = notifs.filter((n) => {
+  const rows = [...notifs, ...olderRows].filter((n) => {
     if (n.type !== "friend_request") return true;
     const { fromUserId } = notificationTargets(n);
     return !fromUserId || !pendingFrom.has(fromUserId);
@@ -122,6 +129,17 @@ function NotificationsInner() {
           ))}
 
           {isLoading && <div className="h-20 animate-pulse rounded-2xl bg-surface" />}
+          {!showOlder ? (
+            <LoadMore hasMore={notifs.length === LIVE_LIMIT} loading={false} onClick={() => setShowOlder(true)} label="Older notifications" />
+          ) : (
+            <LoadMore
+              hasMore={older.isLoading || older.hasNextPage}
+              loading={older.isLoading || older.isFetchingNextPage}
+              onClick={() => older.fetchNextPage()}
+              label="Older notifications"
+            />
+          )}
+          <LoadMore hasMore={pending.hasMore} loading={pending.loadingMore} onClick={pending.loadMore} label="More friend requests" />
         </div>
       )}
     </ResponsiveShell>

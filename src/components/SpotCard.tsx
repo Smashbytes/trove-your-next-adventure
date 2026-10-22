@@ -46,7 +46,7 @@ export function SpotCard({ spot, index = 0 }: { spot: Spot; index?: number }) {
             <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-2.5 py-1 ring-1 ring-white/15">
               <Clock className="h-3 w-3 text-accent" />
               <span className="text-2xs font-semibold uppercase tracking-wider text-white/95">
-                {formatDate(spot.date)} · {formatTime(spot.date)}
+                {spot.ended ? `Ended · ${formatDate(spot.date)}` : `${formatDate(spot.date)} · ${formatTime(spot.date)}`}
               </span>
             </div>
             <h3 className="font-display text-[1.45rem] leading-[1.0] tracking-tight text-white drop-shadow-sm">

@@ -15,7 +15,7 @@
 // combines both.
 
 import { useEffect, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
-import { useFriends } from "./friends-api";
+import { useFriendRequestCount } from "./friends-api";
 
 export interface AppNotification {
   id: string;
@@ -85,10 +85,41 @@ export function useNotifications() {
         // Host notifications (new bookings, followers…) belong to the Engine.
         .eq("audience", "guest")
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(LIVE_LIMIT);
       if (error) throw error;
       return (data ?? []).map(normalize);
     },
+  });
+}
+
+/** Rows kept live (badge, pop-ups); older ones load on request. */
+export const LIVE_LIMIT = 50;
+const OLDER_PAGE = 30;
+
+/**
+ * Notifications older than `before` (the oldest live row), newest first, for
+ * the Notifications page (GST-L03-09). Keyed by time, not offset, so rows
+ * arriving meanwhile don't shift the pages.
+ */
+export function useOlderNotifications(before: string | undefined, enabled: boolean) {
+  const { user } = useAuth();
+  return useInfiniteQuery({
+    queryKey: [...notifKeys.list(user?.id), "older", before],
+    enabled: enabled && !!user && !!before,
+    initialPageParam: before!,
+    queryFn: async ({ pageParam }): Promise<AppNotification[]> => {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select(SELECT)
+        .eq("user_id", user!.id)
+        .eq("audience", "guest")
+        .lt("created_at", pageParam)
+        .order("created_at", { ascending: false })
+        .limit(OLDER_PAGE);
+      if (error) throw error;
+      return (data ?? []).map(normalize);
+    },
+    getNextPageParam: (last) => (last.length === OLDER_PAGE ? last[last.length - 1].created_at : undefined),
   });
 }
 
@@ -124,7 +155,7 @@ export function useNotificationStream() {
           if ((msg.new as { audience?: string }).audience !== "guest") return;
           const row = normalize(msg.new as Parameters<typeof normalize>[0]);
           qc.setQueryData<AppNotification[]>(key, (prev = []) =>
-            prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50),
+            prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, LIVE_LIMIT),
           );
           // A split notification almost always means the split itself moved.
           if (row.type.startsWith("split")) {
@@ -169,9 +200,8 @@ export function useNotificationStream() {
 /** Combined unread badge count: unread notifications + incoming friend requests. */
 export function useUnreadCount(): number {
   const { data: notifs = [] } = useNotifications();
-  const { data: friends = [] } = useFriends();
+  const { data: requests = 0 } = useFriendRequestCount();
   const unread = notifs.filter((n) => !n.read_at).length;
-  const requests = friends.filter((f) => f.status === "pending" && !f.requestedByMe).length;
   // A friend request that already has a notification row would otherwise count
   // twice now that the trigger writes one.
   const requestNotifs = notifs.filter((n) => n.type === "friend_request" && !n.read_at).length;

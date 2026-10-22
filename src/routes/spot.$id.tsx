@@ -6,6 +6,7 @@ import { CapacityBar, CapacityPill } from "@/components/CapacityBar";
 import { NotFoundState } from "@/components/NotFoundState";
 import { friendlyError, toastError } from "@/lib/errors";
 import { FriendStack } from "@/components/FriendStack";
+import { LoadMore } from "@/components/LoadMore";
 import { SpotDetailDesktop } from "@/components/desktop/SpotDetailDesktop";
 import { openDirections } from "@/lib/maps";
 import { formatDate, formatPrice, formatTime, hostSlug } from "@/lib/format";
@@ -35,7 +36,9 @@ export const Route = createFileRoute("/spot/$id")({
 function SpotPage() {
   const { id } = useParams({ from: "/spot/$id" });
   const { data: spot, isLoading } = useListing(id);
-  const { data: friendsGoing = [] } = useFriendsGoing(id);
+  const { data: going } = useFriendsGoing(id);
+  const friendsGoing = going?.friends ?? [];
+  const friendsGoingTotal = going?.total ?? 0;
   const navigate = useNavigate();
   const [qty, setQty] = useState(1);
   const [splitOpen, setSplitOpen] = useState(false);
@@ -53,11 +56,8 @@ function SpotPage() {
   }, [id]);
 
   // Live split flow — real linked friends, filterable by friend group.
-  const { data: friendRows = [] } = useFriends();
-  const linkedFriends = useMemo(
-    () => friendRows.filter((f) => f.status === "accepted"),
-    [friendRows],
-  );
+  const linked = useFriends("accepted");
+  const linkedFriends = linked.friends;
   const { data: myGroups = [] } = useMyGroups();
   const memberGroups = myGroups.filter((g) => g.myStatus === "member");
   const { data: groupMembers = [] } = useGroupMembers(groupFilter ?? undefined);
@@ -132,7 +132,7 @@ function SpotPage() {
   if (!spot) return <NotFoundState />;
 
   function book() {
-    if (!spot) return;
+    if (!spot || spot.ended) return;
     let split: { participants: SplitParticipant[]; perPerson: number } | undefined;
     if (demo && pickedFriends.length > 0) {
       const participants: SplitParticipant[] = [
@@ -178,7 +178,7 @@ function SpotPage() {
   return (
     <>
       <div className="hidden lg:block">
-        <SpotDetailDesktop spot={spot} friendsGoing={friendsGoing} onShare={share} />
+        <SpotDetailDesktop spot={spot} friendsGoing={friendsGoing} friendsGoingTotal={friendsGoingTotal} onShare={share} />
       </div>
       <div className="mx-auto min-h-dvh max-w-md pb-32 lg:hidden">
       {/* Hero image */}
@@ -295,7 +295,7 @@ function SpotPage() {
                 <Send className="h-3 w-3" /> Invite
               </button>
             </div>
-            <div className="mt-3"><FriendStack friends={friendsGoing} max={5} size={32} /></div>
+            <div className="mt-3"><FriendStack friends={friendsGoing} total={friendsGoingTotal} max={5} size={32} /></div>
           </section>
         )}
 
@@ -502,6 +502,7 @@ function SpotPage() {
                       : "Link up with friends on the Spark page to split payments."}
                   </p>
                 )}
+                {!demo && <LoadMore hasMore={linked.hasMore} loading={linked.loadingMore} onClick={linked.loadMore} label="More friends" />}
               </div>
 
               {demo ? (
@@ -536,6 +537,12 @@ function SpotPage() {
           initial={{ y: 80 }} animate={{ y: 0 }}
           className="mx-auto max-w-md px-3"
         >
+          {spot.ended ? (
+            <div role="status" className="glass-strong rounded-2xl p-4 shadow-glow text-center">
+              <p className="font-display text-base">This event has ended</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Bookings are closed. Follow the Spot to hear about their next one.</p>
+            </div>
+          ) : (
           <div className="glass-strong rounded-2xl p-3 shadow-glow flex items-center gap-3">
             <div className="flex items-center rounded-full bg-surface ring-1 ring-border">
               <button onClick={() => setQty(Math.max(1, qty - 1))} disabled={qty <= 1} aria-label="Fewer tickets" className="h-10 w-10 text-lg disabled:opacity-40">−</button>
@@ -558,6 +565,7 @@ function SpotPage() {
               Book now
             </button>
           </div>
+          )}
         </motion.div>
       </section>
       </div>

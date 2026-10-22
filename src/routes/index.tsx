@@ -66,12 +66,8 @@ function MobileDiscover() {
     city: activeCity,
   });
 
-  const { data: friends = [] } = useFriends();
+  const { friends: acceptedFriends } = useFriends("accepted");
   const unreadCount = useUnreadCount();
-  const acceptedFriends = useMemo(
-    () => friends.filter((f) => f.status === "accepted"),
-    [friends],
-  );
   const { data: picks = [], isLoading: picksLoading } = useEditorsPicks();
   // Hero rotation: the TROVE team's curated "Featured" set when it exists, else
   // fall back to the freshest live listing so the hero is never an empty box.

@@ -6,6 +6,7 @@ import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
 import { useFollowedHosts, useToggleFollow } from "@/lib/social";
+import { LoadMore } from "@/components/LoadMore";
 import { CATEGORIES, CITIES } from "@/lib/format";
 import { getGuestPrefs, saveGuestPrefs, type GuestPrefs } from "@/lib/guest-prefs";
 import { isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
@@ -317,7 +318,9 @@ function Interests() {
 }
 
 function MySpots() {
-  const { data: hosts = [], isLoading } = useFollowedHosts();
+  const followed = useFollowedHosts();
+  const hosts = followed.data?.pages.flatMap((p) => p.hosts) ?? [];
+  const isLoading = followed.isLoading;
   const toggleFollow = useToggleFollow();
 
   return (
@@ -363,6 +366,11 @@ function MySpots() {
               </button>
             </div>
           ))}
+          <LoadMore
+            hasMore={followed.hasNextPage}
+            loading={followed.isFetchingNextPage}
+            onClick={() => followed.fetchNextPage()}
+          />
         </div>
       )}
     </Card>
