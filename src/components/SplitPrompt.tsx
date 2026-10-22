@@ -25,7 +25,7 @@ function dismiss(splitId: string) {
 
 export function SplitPrompt() {
   const { isAuthenticated } = useAuth();
-  const { data: inbox = [] } = useSplitInbox();
+  const { items: inbox } = useSplitInbox();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [, setTick] = useState(0);

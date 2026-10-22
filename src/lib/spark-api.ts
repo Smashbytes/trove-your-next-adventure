@@ -5,7 +5,13 @@
 // split payment writes go through edge functions (split-create / split-respond
 // / split-pay) because money moves. See supabase/migrations/0020_spark_social.sql.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
 
@@ -449,19 +455,25 @@ export function splitNeedsAction(item: SplitInboxItem): boolean {
   );
 }
 
+const SPLIT_INBOX_PAGE = 20;
+type SplitInboxPage = { items: SplitInboxItem[]; total: number };
+
+/** Splits that need the user now (respond or pay), newest first, a page at a time. */
 export function useSplitInbox() {
   const { user } = useAuth();
-  return useQuery<SplitInboxItem[]>({
+  const q = useInfiniteQuery<SplitInboxPage, Error, InfiniteData<SplitInboxPage>, (string | undefined)[], number>({
     queryKey: ["split-inbox", user?.id],
     enabled: !!user,
-    refetchInterval: (query) =>
-      (query.state.data ?? []).some((i) => i.splitStatus === "pending" || i.splitStatus === "ready")
-        ? 8000
-        : false,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("my_split_inbox");
+    initialPageParam: 0,
+    refetchInterval: (query) => ((query.state.data?.pages[0]?.total ?? 0) > 0 ? 8000 : false),
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase.rpc("my_split_inbox", {
+        p_needs_action: true,
+        p_offset: pageParam,
+        p_limit: SPLIT_INBOX_PAGE,
+      });
       if (error) throw error;
-      return (data ?? []).map((r) => ({
+      const items = (data ?? []).map((r) => ({
         splitId: r.split_id,
         shareId: r.share_id,
         listingId: r.listing_id,
@@ -477,8 +489,20 @@ export function useSplitInbox() {
         bookingId: r.booking_id,
         createdAt: r.created_at,
       }));
+      return { items, total: Number(data?.[0]?.total ?? 0) };
+    },
+    getNextPageParam: (last, pages) => {
+      const next = pages.length * SPLIT_INBOX_PAGE;
+      return next < last.total ? next : undefined;
     },
   });
+  return {
+    items: q.data?.pages.flatMap((p) => p.items) ?? [],
+    total: q.data?.pages[0]?.total ?? 0,
+    hasMore: !!q.hasNextPage,
+    loadingMore: q.isFetchingNextPage,
+    loadMore: () => void q.fetchNextPage(),
+  };
 }
 
 export interface SplitParticipantRow {

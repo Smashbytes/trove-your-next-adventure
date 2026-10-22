@@ -123,12 +123,15 @@ function TabButton({ active, onClick, icon, label }: {
 // ---------------------------------------------------------------------------
 
 function ActiveSplits() {
-  const { data: inbox = [] } = useSplitInbox();
+  const { items, total, hasMore, loadingMore, loadMore } = useSplitInbox();
   const navigate = useNavigate();
-  const actionable = inbox.filter(splitNeedsAction);
+  const actionable = items.filter(splitNeedsAction);
   if (actionable.length === 0) return null;
   return (
     <div className="space-y-2">
+      {total > 1 && (
+        <p className="text-xs font-semibold text-muted-foreground">{total} splits need you</p>
+      )}
       {actionable.map((item) => (
         <button
           key={item.splitId}
@@ -152,6 +155,7 @@ function ActiveSplits() {
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
       ))}
+      <LoadMore hasMore={hasMore} loading={loadingMore} onClick={loadMore} label="More splits" />
     </div>
   );
 }
