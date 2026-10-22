@@ -59,7 +59,7 @@ export type Database = {
           ends_at: string
           id: string
           listing_id: string
-          price_override_kobo: number | null
+          price_override_cents: number | null
           starts_at: string
           status: string
         }
@@ -69,7 +69,7 @@ export type Database = {
           ends_at: string
           id?: string
           listing_id: string
-          price_override_kobo?: number | null
+          price_override_cents?: number | null
           starts_at: string
           status?: string
         }
@@ -79,7 +79,7 @@ export type Database = {
           ends_at?: string
           id?: string
           listing_id?: string
-          price_override_kobo?: number | null
+          price_override_cents?: number | null
           starts_at?: string
           status?: string
         }
@@ -152,21 +152,19 @@ export type Database = {
           cancelled_at: string | null
           checked_in_at: string | null
           created_at: string
-          fee_kobo: number
+          fee_cents: number
           guest_id: string
           id: string
           listing_id: string
           party_size: number
-          payout_kobo: number
-          paystack_reference: string | null
-          paystack_split_code: string | null
+          payout_cents: number
           pending_expires_at: string | null
           refunded_at: string | null
           slot_id: string | null
           status: Database["public"]["Enums"]["booking_status"]
-          subtotal_kobo: number
+          subtotal_cents: number
           ticket_type_id: string | null
-          total_kobo: number
+          total_cents: number
           updated_at: string
         }
         Insert: {
@@ -175,21 +173,19 @@ export type Database = {
           cancelled_at?: string | null
           checked_in_at?: string | null
           created_at?: string
-          fee_kobo?: number
+          fee_cents?: number
           guest_id: string
           id?: string
           listing_id: string
           party_size?: number
-          payout_kobo?: number
-          paystack_reference?: string | null
-          paystack_split_code?: string | null
+          payout_cents?: number
           pending_expires_at?: string | null
           refunded_at?: string | null
           slot_id?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
-          subtotal_kobo?: number
+          subtotal_cents?: number
           ticket_type_id?: string | null
-          total_kobo?: number
+          total_cents?: number
           updated_at?: string
         }
         Update: {
@@ -198,21 +194,19 @@ export type Database = {
           cancelled_at?: string | null
           checked_in_at?: string | null
           created_at?: string
-          fee_kobo?: number
+          fee_cents?: number
           guest_id?: string
           id?: string
           listing_id?: string
           party_size?: number
-          payout_kobo?: number
-          paystack_reference?: string | null
-          paystack_split_code?: string | null
+          payout_cents?: number
           pending_expires_at?: string | null
           refunded_at?: string | null
           slot_id?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
-          subtotal_kobo?: number
+          subtotal_cents?: number
           ticket_type_id?: string | null
-          total_kobo?: number
+          total_cents?: number
           updated_at?: string
         }
         Relationships: [
@@ -714,7 +708,6 @@ export type Database = {
           payout_bank_json: Json | null
           payouts_frozen: boolean
           payouts_frozen_at: string | null
-          paystack_subaccount_code: string | null
           response_rate: number
           slug: string
           social_links: Json
@@ -744,7 +737,6 @@ export type Database = {
           payout_bank_json?: Json | null
           payouts_frozen?: boolean
           payouts_frozen_at?: string | null
-          paystack_subaccount_code?: string | null
           response_rate?: number
           slug: string
           social_links?: Json
@@ -774,7 +766,6 @@ export type Database = {
           payout_bank_json?: Json | null
           payouts_frozen?: boolean
           payouts_frozen_at?: string | null
-          paystack_subaccount_code?: string | null
           response_rate?: number
           slug?: string
           social_links?: Json
@@ -848,7 +839,7 @@ export type Database = {
       }
       ledger: {
         Row: {
-          amount_kobo: number
+          amount_cents: number
           created_at: string | null
           currency: string | null
           id: string
@@ -858,7 +849,7 @@ export type Database = {
           ref_type: string | null
         }
         Insert: {
-          amount_kobo: number
+          amount_cents: number
           created_at?: string | null
           currency?: string | null
           id?: string
@@ -868,7 +859,7 @@ export type Database = {
           ref_type?: string | null
         }
         Update: {
-          amount_kobo?: number
+          amount_cents?: number
           created_at?: string | null
           currency?: string | null
           id?: string
@@ -933,7 +924,7 @@ export type Database = {
         Row: {
           address: string | null
           amenities: string[]
-          base_price_kobo: number
+          base_price_cents: number
           blocks: Json
           booking_mode: Database["public"]["Enums"]["booking_mode"]
           capacity: number | null
@@ -963,7 +954,7 @@ export type Database = {
         Insert: {
           address?: string | null
           amenities?: string[]
-          base_price_kobo?: number
+          base_price_cents?: number
           blocks?: Json
           booking_mode?: Database["public"]["Enums"]["booking_mode"]
           capacity?: number | null
@@ -993,7 +984,7 @@ export type Database = {
         Update: {
           address?: string | null
           amenities?: string[]
-          base_price_kobo?: number
+          base_price_cents?: number
           blocks?: Json
           booking_mode?: Database["public"]["Enums"]["booking_mode"]
           capacity?: number | null
@@ -1117,7 +1108,7 @@ export type Database = {
       }
       payments: {
         Row: {
-          amount_kobo: number
+          amount_cents: number
           booking_id: string
           created_at: string
           currency: string
@@ -1129,7 +1120,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          amount_kobo: number
+          amount_cents: number
           booking_id: string
           created_at?: string
           currency?: string
@@ -1141,7 +1132,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          amount_kobo?: number
+          amount_cents?: number
           booking_id?: string
           created_at?: string
           currency?: string
@@ -1164,31 +1155,28 @@ export type Database = {
       }
       payouts: {
         Row: {
-          amount_kobo: number
+          amount_cents: number
           created_at: string
           host_id: string
           id: string
-          paystack_transfer_code: string | null
           period_end: string | null
           period_start: string | null
           status: Database["public"]["Enums"]["payout_status"]
         }
         Insert: {
-          amount_kobo: number
+          amount_cents: number
           created_at?: string
           host_id: string
           id?: string
-          paystack_transfer_code?: string | null
           period_end?: string | null
           period_start?: string | null
           status?: Database["public"]["Enums"]["payout_status"]
         }
         Update: {
-          amount_kobo?: number
+          amount_cents?: number
           created_at?: string
           host_id?: string
           id?: string
-          paystack_transfer_code?: string | null
           period_end?: string | null
           period_start?: string | null
           status?: Database["public"]["Enums"]["payout_status"]
@@ -1263,7 +1251,6 @@ export type Database = {
           is_host: boolean
           is_private: boolean
           notification_prefs: Json
-          paystack_customer_code: string | null
           phone: string | null
           updated_at: string
           username: string | null
@@ -1288,7 +1275,6 @@ export type Database = {
           is_host?: boolean
           is_private?: boolean
           notification_prefs?: Json
-          paystack_customer_code?: string | null
           phone?: string | null
           updated_at?: string
           username?: string | null
@@ -1313,7 +1299,6 @@ export type Database = {
           is_host?: boolean
           is_private?: boolean
           notification_prefs?: Json
-          paystack_customer_code?: string | null
           phone?: string | null
           updated_at?: string
           username?: string | null
@@ -1322,7 +1307,7 @@ export type Database = {
       }
       refunds: {
         Row: {
-          amount_kobo: number
+          amount_cents: number
           approved_by: string | null
           booking_id: string
           created_at: string
@@ -1335,7 +1320,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          amount_kobo: number
+          amount_cents: number
           approved_by?: string | null
           booking_id: string
           created_at?: string
@@ -1348,7 +1333,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          amount_kobo?: number
+          amount_cents?: number
           approved_by?: string | null
           booking_id?: string
           created_at?: string
@@ -1563,37 +1548,37 @@ export type Database = {
         Row: {
           booking_id: string | null
           created_at: string
-          fee_per_share_kobo: number
+          fee_per_share_cents: number
           id: string
           initiator_id: string
           listing_id: string
           qty: number
           status: Database["public"]["Enums"]["split_status"]
-          ticket_total_kobo: number
+          ticket_total_cents: number
           updated_at: string
         }
         Insert: {
           booking_id?: string | null
           created_at?: string
-          fee_per_share_kobo?: number
+          fee_per_share_cents?: number
           id?: string
           initiator_id: string
           listing_id: string
           qty: number
           status?: Database["public"]["Enums"]["split_status"]
-          ticket_total_kobo: number
+          ticket_total_cents: number
           updated_at?: string
         }
         Update: {
           booking_id?: string | null
           created_at?: string
-          fee_per_share_kobo?: number
+          fee_per_share_cents?: number
           id?: string
           initiator_id?: string
           listing_id?: string
           qty?: number
           status?: Database["public"]["Enums"]["split_status"]
-          ticket_total_kobo?: number
+          ticket_total_cents?: number
           updated_at?: string
         }
         Relationships: [
@@ -1624,12 +1609,11 @@ export type Database = {
         Row: {
           agreed_at: string | null
           created_at: string
-          fee_kobo: number
+          fee_cents: number
           id: string
           paid_at: string | null
-          paystack_reference: string | null
           responded_at: string | null
-          share_kobo: number
+          share_cents: number
           split_id: string
           status: Database["public"]["Enums"]["split_share_status"]
           user_id: string
@@ -1637,12 +1621,11 @@ export type Database = {
         Insert: {
           agreed_at?: string | null
           created_at?: string
-          fee_kobo?: number
+          fee_cents?: number
           id?: string
           paid_at?: string | null
-          paystack_reference?: string | null
           responded_at?: string | null
-          share_kobo: number
+          share_cents: number
           split_id: string
           status?: Database["public"]["Enums"]["split_share_status"]
           user_id: string
@@ -1650,12 +1633,11 @@ export type Database = {
         Update: {
           agreed_at?: string | null
           created_at?: string
-          fee_kobo?: number
+          fee_cents?: number
           id?: string
           paid_at?: string | null
-          paystack_reference?: string | null
           responded_at?: string | null
-          share_kobo?: number
+          share_cents?: number
           split_id?: string
           status?: Database["public"]["Enums"]["split_share_status"]
           user_id?: string
@@ -1816,7 +1798,7 @@ export type Database = {
           listing_id: string
           name: string
           perks: string[]
-          price_kobo: number
+          price_cents: number
           sale_ends_at: string | null
           sale_starts_at: string | null
           sort_order: number
@@ -1833,7 +1815,7 @@ export type Database = {
           listing_id: string
           name: string
           perks?: string[]
-          price_kobo?: number
+          price_cents?: number
           sale_ends_at?: string | null
           sale_starts_at?: string | null
           sort_order?: number
@@ -1850,7 +1832,7 @@ export type Database = {
           listing_id?: string
           name?: string
           perks?: string[]
-          price_kobo?: number
+          price_cents?: number
           sale_ends_at?: string | null
           sale_starts_at?: string | null
           sort_order?: number
@@ -1941,7 +1923,7 @@ export type Database = {
         Row: {
           address: string | null
           amenities: string[] | null
-          base_price_kobo: number | null
+          base_price_cents: number | null
           blocks: Json | null
           booking_mode: Database["public"]["Enums"]["booking_mode"] | null
           capacity: number | null
@@ -2160,7 +2142,7 @@ export type Database = {
         Returns: {
           booking_id: string | null
           created_at: string
-          fee_kobo: number
+          fee_cents: number
           initiator_id: string
           initiator_name: string
           listing_id: string
@@ -2168,10 +2150,10 @@ export type Database = {
           my_status: Database["public"]["Enums"]["split_share_status"]
           qty: number
           share_id: string
-          share_kobo: number
+          share_cents: number
           split_id: string
           split_status: Database["public"]["Enums"]["split_status"]
-          ticket_total_kobo: number
+          ticket_total_cents: number
         }[]
       }
       search_guests: {
@@ -2192,11 +2174,11 @@ export type Database = {
         Args: { p_split: string }
         Returns: {
           avatar_url: string | null
-          fee_kobo: number
+          fee_cents: number
           full_name: string | null
           is_initiator: boolean
           share_id: string
-          share_kobo: number
+          share_cents: number
           status: Database["public"]["Enums"]["split_share_status"]
           user_id: string
           username: string | null

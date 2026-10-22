@@ -1,4 +1,4 @@
-// Bookings â€” unified view-model over the demo (localStorage) flow and the live
+// Bookings — unified view-model over the demo (localStorage) flow and the live
 // (Supabase edge function) flow, so the ticket/booking UI speaks one shape.
 //
 //   - demo account: existing mock store (localStorage), full split-bill flow
@@ -9,7 +9,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import { useAuth } from "./auth";
-import { useIsDemo, loadSpotsByIds, koboToRand } from "./listings-api";
+import { useIsDemo, loadSpotsByIds } from "./listings-api";
+import { centsToRand } from "./format";
 import type { Spot } from "./spots";
 import {
   getBookings,
@@ -132,14 +133,14 @@ interface DbBookingRow {
   id: string;
   listing_id: string;
   party_size: number;
-  total_kobo: number;
+  total_cents: number;
   status: string;
   created_at: string;
-  booking_fee_kobo: number | null;
+  booking_fee_cents: number | null;
   cancelled_by: "guest" | "host" | "trove" | null;
   cancel_reason: string | null;
   tickets: { code: string }[] | null;
-  refunds: { amount_kobo: number; status: string }[] | null;
+  refunds: { amount_cents: number; status: string }[] | null;
 }
 
 async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
@@ -149,21 +150,21 @@ async function loadLiveBookings(rows: DbBookingRow[]): Promise<BookingView[]> {
     listingId: r.listing_id,
     spot: spotMap.get(r.listing_id) ?? null,
     qty: r.party_size,
-    total: koboToRand(r.total_kobo),
+    total: centsToRand(r.total_cents),
     status: dbStatusToView(r.status),
-    ticketCode: r.tickets?.[0]?.code ?? "â€”",
+    ticketCode: r.tickets?.[0]?.code ?? "—",
     createdAt: r.created_at,
     cancelledBy: r.cancelled_by ?? undefined,
     cancelReason: r.cancel_reason ?? undefined,
-    bookingFee: koboToRand(r.booking_fee_kobo ?? 0),
-    refunded: koboToRand(
-      (r.refunds ?? []).filter((x) => x.status === "succeeded").reduce((s, x) => s + x.amount_kobo, 0),
+    bookingFee: centsToRand(r.booking_fee_cents ?? 0),
+    refunded: centsToRand(
+      (r.refunds ?? []).filter((x) => x.status === "succeeded").reduce((s, x) => s + x.amount_cents, 0),
     ),
   }));
 }
 
 const BOOKING_SELECT =
-  "id, listing_id, party_size, total_kobo, booking_fee_kobo, status, created_at, cancelled_by, cancel_reason, tickets(code), refunds(amount_kobo, status)";
+  "id, listing_id, party_size, total_cents, booking_fee_cents, status, created_at, cancelled_by, cancel_reason, tickets(code), refunds(amount_cents, status)";
 
 export function useMyBookings() {
   const demo = useIsDemo();
@@ -367,9 +368,9 @@ export function useCancelBooking() {
 export interface RefundQuote {
   policy: string;
   percent: number;
-  amountKobo: number;
-  paidKobo: number;
-  bookingFeeKobo: number;
+  amountCents: number;
+  paidCents: number;
+  bookingFeeCents: number;
   nextChangeAt: string | null;
   nextPercent: number | null;
 }
@@ -388,9 +389,9 @@ export function useRefundQuote(bookingId: string | undefined, enabled = true) {
       return {
         policy: String(q.policy ?? "standard"),
         percent: Number(q.percent ?? 0),
-        amountKobo: Number(q.amount_kobo ?? 0),
-        paidKobo: Number(q.paid_kobo ?? 0),
-        bookingFeeKobo: Number(q.booking_fee_kobo ?? 0),
+        amountCents: Number(q.amount_cents ?? 0),
+        paidCents: Number(q.paid_cents ?? 0),
+        bookingFeeCents: Number(q.booking_fee_cents ?? 0),
         nextChangeAt: (q.next_change_at as string | null) ?? null,
         nextPercent: q.next_percent == null ? null : Number(q.next_percent),
       };
@@ -406,7 +407,7 @@ export function useCheckoutFees() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("checkout_fees" as never);
       if (error) throw error;
-      return { bookingFee: koboToRand(Number((data as unknown as { booking_fee_kobo?: number })?.booking_fee_kobo ?? 0)) };
+      return { bookingFee: centsToRand(Number((data as unknown as { booking_fee_cents?: number })?.booking_fee_cents ?? 0)) };
     },
   });
 }
@@ -467,7 +468,7 @@ export function refundPolicyText(policy: string | undefined): string {
     case "30d":
       return "90% back if you cancel 30+ days before";
     default:
-      return "90% back if you cancel 72+ hours before, 50% at 24â€“72 hours";
+      return "90% back if you cancel 72+ hours before, 50% at 24–72 hours";
   }
 }
 

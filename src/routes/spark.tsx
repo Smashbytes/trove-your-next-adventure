@@ -9,8 +9,7 @@ import {
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { FriendsManager } from "@/components/FriendsManager";
 import { useAuth } from "@/lib/auth";
-import { formatPrice } from "@/lib/format";
-import { koboToRand } from "@/lib/listings-api";
+import { centsToRand, formatPrice } from "@/lib/format";
 import {
   splitNeedsAction,
   useCloseBy,
@@ -145,8 +144,8 @@ function ActiveSplits() {
             </p>
             <p className="text-xs text-muted-foreground">
               {item.splitStatus === "pending"
-                ? `${item.initiatorName} · your share ${formatPrice(koboToRand(item.shareKobo))} + R5 fee`
-                : `Pay ${formatPrice(koboToRand(item.shareKobo + item.feeKobo))} to lock in the tickets`}
+                ? `${item.initiatorName} · your share ${formatPrice(centsToRand(item.shareCents))} + R5 fee`
+                : `Pay ${formatPrice(centsToRand(item.shareCents + item.feeCents))} to lock in the tickets`}
             </p>
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

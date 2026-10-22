@@ -42,7 +42,7 @@ export const FEATURED_TTL_MS = 48 * 60 * 60 * 1000;
  * wire (GST-L02-10).
  */
 const LISTING_COLUMNS =
-  "id, host_id, category_id, title, description, status, booking_mode, base_price_kobo, capacity, " +
+  "id, host_id, category_id, title, description, status, booking_mode, base_price_cents, capacity, " +
   "lat, lng, address, city, amenities, cover_url, metadata, created_at, listing_type, capacity_booked, " +
   "custom_questions, refund_policy, rating_avg, review_count, cancelled_at";
 
@@ -67,9 +67,6 @@ export function useIsDemo(): boolean {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** @deprecated use `centsToRand` (the DB `_kobo` columns hold cents). */
-export const koboToRand = centsToRand;
 
 /** "taboo-night-club" → "Taboo Night Club". Stop-gap host display name. */
 export function prettifySlug(slug: string | null | undefined): string {
@@ -131,7 +128,7 @@ export function listingToSpot(row: ListingWithCapacity, extras: ListingExtras): 
     area: meta.area ?? row.address ?? "",
     date,
     doors: (meta as { doors_open?: string }).doors_open ?? "",
-    price: centsToRand(row.base_price_kobo),
+    price: centsToRand(row.base_price_cents),
     rating: agg.rating_avg != null ? Math.round(Number(agg.rating_avg) * 10) / 10 : 0,
     reviews: Number(agg.review_count ?? 0),
     image: row.cover_url || FALLBACK_IMAGE,
@@ -158,12 +155,12 @@ function readRooms(meta: ListingMetadata): Spot["rooms"] {
   const raw = (meta as { rooms?: unknown }).rooms;
   if (!Array.isArray(raw)) return undefined;
   const rooms = raw
-    .filter((r): r is { name: string; capacity?: number; price_kobo?: number } =>
+    .filter((r): r is { name: string; capacity?: number; price_cents?: number } =>
       !!r && typeof r === "object" && typeof (r as { name?: unknown }).name === "string")
     .map((r) => ({
       name: r.name,
       capacity: typeof r.capacity === "number" ? r.capacity : undefined,
-      price: centsToRand(typeof r.price_kobo === "number" ? r.price_kobo : 0),
+      price: centsToRand(typeof r.price_cents === "number" ? r.price_cents : 0),
     }));
   return rooms.length > 0 ? rooms : undefined;
 }

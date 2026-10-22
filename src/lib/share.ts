@@ -37,7 +37,7 @@ export async function fetchSpotOg(id: string): Promise<SpotOg | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/listings_with_capacity?id=eq.${id}&status=eq.live&select=id,title,city,base_price_kobo,metadata,description`,
+      `${SUPABASE_URL}/rest/v1/listings_with_capacity?id=eq.${id}&status=eq.live&select=id,title,city,base_price_cents,metadata,description`,
       {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         // A slow lookup mustn't hold up the page for a crawler (GST-L02-08).
@@ -50,7 +50,7 @@ export async function fetchSpotOg(id: string): Promise<SpotOg | null> {
       id: string;
       title: string;
       city: string | null;
-      base_price_kobo: number | null;
+      base_price_cents: number | null;
       metadata: { tagline?: string; date?: string } | null;
       description: string | null;
     }>;
@@ -65,8 +65,8 @@ export async function fetchSpotOg(id: string): Promise<SpotOg | null> {
           timeZone: "Africa/Johannesburg",
         }).format(new Date(meta.date))
       : null;
-    // `_kobo` is only the column name — values are ZAR cents.
-    const price = row.base_price_kobo ? `From R${Math.round(row.base_price_kobo / 100)}` : "Free entry";
+    // Values are ZAR cents.
+    const price = row.base_price_cents ? `From R${Math.round(row.base_price_cents / 100)}` : "Free entry";
     const lead = meta.tagline || (row.description ?? "").replace(/\s+/g, " ").slice(0, 120);
     const facts = [date, row.city, price].filter(Boolean).join(" · ");
 

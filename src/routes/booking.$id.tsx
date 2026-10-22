@@ -407,8 +407,8 @@ function RefundPanel({ booking, policy }: { booking: BookingView; policy?: strin
     );
   }
 
-  const refund = formatPrice(q.amountKobo / 100);
-  const fee = q.bookingFeeKobo > 0 ? formatPrice(q.bookingFeeKobo / 100) : null;
+  const refund = formatPrice(q.amountCents / 100);
+  const fee = q.bookingFeeCents > 0 ? formatPrice(q.bookingFeeCents / 100) : null;
 
   if (q.percent === 0) {
     return (

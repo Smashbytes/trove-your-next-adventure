@@ -7,8 +7,8 @@ import {
   Ticket, Users2, X, Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useListing, koboToRand } from "@/lib/listings-api";
-import { formatPrice, formatDate, formatTime } from "@/lib/format";
+import { useListing } from "@/lib/listings-api";
+import { centsToRand, formatPrice, formatDate, formatTime } from "@/lib/format";
 import { setCheckoutIntent } from "@/lib/store";
 import {
   usePaySplitShare,
@@ -92,7 +92,7 @@ function SplitPage() {
               </p>
               <p className="truncate font-display text-base">{spot.name}</p>
               <p className="truncate text-2xs text-muted-foreground">
-                {split.qty} ticket{split.qty > 1 ? "s" : ""} · total {formatPrice(koboToRand(split.ticketTotalKobo))}
+                {split.qty} ticket{split.qty > 1 ? "s" : ""} · total {formatPrice(centsToRand(split.ticketTotalCents))}
               </p>
             </div>
           </Link>
@@ -112,7 +112,7 @@ function SplitPage() {
             ))}
           </div>
           <p className="mt-3 text-2xs text-muted-foreground">
-            Each person pays their share + {formatPrice(koboToRand(split.feePerShareKobo))} split processing fee.
+            Each person pays their share + {formatPrice(centsToRand(split.feePerShareCents))} split processing fee.
           </p>
         </section>
 
@@ -251,7 +251,7 @@ function ParticipantRow({ p, isMe }: { p: SplitParticipantRow; isMe: boolean }) 
         </p>
         {p.status !== "declined" && (
           <p className="text-2xs text-muted-foreground">
-            {formatPrice(koboToRand(p.shareKobo))} + {formatPrice(koboToRand(p.feeKobo))} fee
+            {formatPrice(centsToRand(p.shareCents))} + {formatPrice(centsToRand(p.feeCents))} fee
           </p>
         )}
       </div>
@@ -305,7 +305,7 @@ function Actions({ split, mine, isInitiator }: {
     setCheckoutIntent({
       spotId: split.listingId,
       qty: split.qty,
-      total: koboToRand(split.ticketTotalKobo),
+      total: centsToRand(split.ticketTotalCents),
     });
     navigate({ to: "/checkout/$id", params: { id: split.listingId } });
   }
@@ -323,7 +323,7 @@ function Actions({ split, mine, isInitiator }: {
           />
           <span>
             I agree to the <span className="font-semibold text-foreground">split payment agreement</span>: I'll pay my
-            share of {formatPrice(koboToRand(mine.shareKobo))} plus the {formatPrice(koboToRand(mine.feeKobo))} split
+            share of {formatPrice(centsToRand(mine.shareCents))} plus the {formatPrice(centsToRand(mine.feeCents))} split
             processing fee once everyone accepts. Tickets are only issued after all shares are paid.
           </span>
         </label>
@@ -333,7 +333,7 @@ function Actions({ split, mine, isInitiator }: {
             disabled={!agreed || busy !== null}
             className="flex-1 rounded-full bg-gradient-brand py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40"
           >
-            {busy === "accept" ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : <>Accept · {formatPrice(koboToRand(mine.shareKobo))}</>}
+            {busy === "accept" ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : <>Accept · {formatPrice(centsToRand(mine.shareCents))}</>}
           </button>
           <button
             onClick={() => act("decline")}
@@ -349,7 +349,7 @@ function Actions({ split, mine, isInitiator }: {
 
   // ── Ready: pay my share ──────────────────────────────────────────────────────
   if (split.status === "ready" && mine?.status === "accepted") {
-    const amount = koboToRand(mine.shareKobo + mine.feeKobo);
+    const amount = centsToRand(mine.shareCents + mine.feeCents);
     return (
       <button
         onClick={payShare}
@@ -393,7 +393,7 @@ function Actions({ split, mine, isInitiator }: {
           onClick={buySolo}
           className="w-full rounded-full bg-gradient-brand py-3.5 text-sm font-semibold text-primary-foreground shadow-glow"
         >
-          Buy all {split.qty} ticket{split.qty > 1 ? "s" : ""} myself · {formatPrice(koboToRand(split.ticketTotalKobo))}
+          Buy all {split.qty} ticket{split.qty > 1 ? "s" : ""} myself · {formatPrice(centsToRand(split.ticketTotalCents))}
         </button>
         <Link
           to="/spot/$id"
