@@ -3606,7 +3606,7 @@ export type Database = {
         }[]
       }
       my_split_inbox: {
-        Args: never
+        Args: { p_limit?: number; p_needs_action?: boolean; p_offset?: number }
         Returns: {
           booking_id: string
           created_at: string
@@ -3616,12 +3616,14 @@ export type Database = {
           listing_id: string
           listing_title: string
           my_status: Database["public"]["Enums"]["split_share_status"]
+          needs_action: boolean
           qty: number
           share_cents: number
           share_id: string
           split_id: string
           split_status: Database["public"]["Enums"]["split_status"]
           ticket_total_cents: number
+          total: number
         }[]
       }
       notify_user: {
