@@ -57,14 +57,14 @@ export function useBookingOptions(spot: Spot | null | undefined, demo: boolean) 
       const [tiersRes, slotsRes] = await Promise.all([
         supabase
           .from("ticket_types")
-          .select("id, name, description, price_kobo, sale_starts_at, sale_ends_at, sort_order")
+          .select("id, name, description, price_cents, sale_starts_at, sale_ends_at, sort_order")
           .eq("listing_id", id!)
           .eq("status", "active")
           .order("sort_order", { ascending: true }),
         spot!.bookingMode === "slot"
           ? supabase
               .from("availability")
-              .select("id, starts_at, ends_at, price_override_kobo")
+              .select("id, starts_at, ends_at, price_override_cents")
               .eq("listing_id", id!)
               .eq("status", "open")
               .gt("starts_at", now)
@@ -87,7 +87,7 @@ export function useBookingOptions(spot: Spot | null | undefined, demo: boolean) 
           id: t.id,
           label: t.name,
           detail: t.description ?? undefined,
-          unitPrice: centsToRand(t.price_kobo),
+          unitPrice: centsToRand(t.price_cents),
         }));
       }
 
@@ -95,14 +95,14 @@ export function useBookingOptions(spot: Spot | null | undefined, demo: boolean) 
         id: string;
         starts_at: string;
         ends_at: string;
-        price_override_kobo: number | null;
+        price_override_cents: number | null;
       }>;
       if (slots.length > 0) {
         return slots.map((s) => ({
           kind: "slot" as const,
           id: s.id,
           label: slotFormat.format(new Date(s.starts_at)),
-          unitPrice: s.price_override_kobo != null ? centsToRand(s.price_override_kobo) : spot!.price,
+          unitPrice: s.price_override_cents != null ? centsToRand(s.price_override_cents) : spot!.price,
         }));
       }
 

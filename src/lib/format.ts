@@ -76,7 +76,7 @@ export function nearestCity(lat: number, lng: number): string {
   return best;
 }
 
-/** DB stores money in cents (legacy column names end in `_kobo`). Exact, no rounding. */
+/** DB stores money in cents (legacy column names end in `_cents`). Exact, no rounding. */
 export function centsToRand(cents: number | null | undefined): number {
   return (cents ?? 0) / 100;
 }

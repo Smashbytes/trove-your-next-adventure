@@ -7,8 +7,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Zap } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { formatPrice } from "@/lib/format";
-import { koboToRand } from "@/lib/listings-api";
+import { centsToRand, formatPrice } from "@/lib/format";
 import { splitNeedsAction, useSplitInbox } from "@/lib/spark-api";
 
 const DISMISS_KEY = "trove:split-prompt-dismissed";
@@ -62,8 +61,8 @@ export function SplitPrompt() {
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {needsPayment
-                  ? `${item.listingTitle} — ${formatPrice(koboToRand(item.shareKobo + item.feeKobo))} locks in the tickets`
-                  : `${item.initiatorName} · ${item.listingTitle} · ${formatPrice(koboToRand(item.shareKobo))} + R5 fee`}
+                  ? `${item.listingTitle} — ${formatPrice(centsToRand(item.shareCents + item.feeCents))} locks in the tickets`
+                  : `${item.initiatorName} · ${item.listingTitle} · ${formatPrice(centsToRand(item.shareCents))} + R5 fee`}
               </p>
             </div>
             <button

@@ -432,9 +432,9 @@ export interface SplitInboxItem {
   initiatorId: string;
   initiatorName: string;
   qty: number;
-  ticketTotalKobo: number;
-  shareKobo: number;
-  feeKobo: number;
+  ticketTotalCents: number;
+  shareCents: number;
+  feeCents: number;
   splitStatus: SplitStatus;
   myStatus: ShareStatus;
   bookingId: string | null;
@@ -469,9 +469,9 @@ export function useSplitInbox() {
         initiatorId: r.initiator_id,
         initiatorName: r.initiator_name,
         qty: r.qty,
-        ticketTotalKobo: r.ticket_total_kobo,
-        shareKobo: r.share_kobo,
-        feeKobo: r.fee_kobo,
+        ticketTotalCents: r.ticket_total_cents,
+        shareCents: r.share_cents,
+        feeCents: r.fee_cents,
         splitStatus: r.split_status,
         myStatus: r.my_status,
         bookingId: r.booking_id,
@@ -487,8 +487,8 @@ export interface SplitParticipantRow {
   username: string | null;
   fullName: string | null;
   avatarUrl: string | null;
-  shareKobo: number;
-  feeKobo: number;
+  shareCents: number;
+  feeCents: number;
   status: ShareStatus;
   isInitiator: boolean;
 }
@@ -499,8 +499,8 @@ export interface SplitDetail {
   initiatorId: string;
   bookingId: string | null;
   qty: number;
-  ticketTotalKobo: number;
-  feePerShareKobo: number;
+  ticketTotalCents: number;
+  feePerShareCents: number;
   status: SplitStatus;
   createdAt: string;
   /** When the reserved booking's payment window closes (status "ready" only). */
@@ -519,7 +519,7 @@ export function useSplit(splitId: string | undefined) {
     queryFn: async () => {
       const { data: bill, error } = await supabase
         .from("split_bills")
-        .select("id, listing_id, initiator_id, booking_id, qty, ticket_total_kobo, fee_per_share_kobo, status, created_at")
+        .select("id, listing_id, initiator_id, booking_id, qty, ticket_total_cents, fee_per_share_cents, status, created_at")
         .eq("id", splitId!)
         .maybeSingle();
       if (error) throw error;
@@ -537,8 +537,8 @@ export function useSplit(splitId: string | undefined) {
         initiatorId: bill.initiator_id,
         bookingId: bill.booking_id,
         qty: bill.qty,
-        ticketTotalKobo: bill.ticket_total_kobo,
-        feePerShareKobo: bill.fee_per_share_kobo,
+        ticketTotalCents: bill.ticket_total_cents,
+        feePerShareCents: bill.fee_per_share_cents,
         status: bill.status,
         createdAt: bill.created_at,
         expiresAt: booking?.pending_expires_at ?? null,
@@ -548,8 +548,8 @@ export function useSplit(splitId: string | undefined) {
           username: p.username,
           fullName: p.full_name,
           avatarUrl: p.avatar_url,
-          shareKobo: p.share_kobo,
-          feeKobo: p.fee_kobo,
+          shareCents: p.share_cents,
+          feeCents: p.fee_cents,
           status: p.status,
           isInitiator: p.is_initiator,
         })),
