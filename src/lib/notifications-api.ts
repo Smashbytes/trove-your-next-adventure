@@ -27,6 +27,7 @@ import {
   Hourglass,
   RotateCcw,
   ShieldAlert,
+  Star,
   Ticket,
   UserCheck,
   UserPlus,
@@ -431,6 +432,14 @@ const CATALOGUE: Record<string, NotificationSpec> = {
     tone: "brand",
     action: "booking",
     actionLabel: "View ticket",
+  },
+  // send_review_requests(), 2 h after the experience ends; the booking page has the form.
+  review_request: {
+    title: "How was it?",
+    icon: Star,
+    tone: "brand",
+    action: "booking",
+    actionLabel: "Rate it",
   },
 };
 
