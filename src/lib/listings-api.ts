@@ -318,9 +318,11 @@ export function useListings(filters: ListingFilters = {}) {
         .limit(filters.limit ?? 60);
 
       if (filters.city && filters.city !== "All") {
-        // Map display name → DB city name (e.g. "Joburg" → "Johannesburg").
-        const dbCity = CITY_LABELS[filters.city] ?? filters.city;
-        q = q.eq("city", dbCity);
+        // Map display name → metro (e.g. "Joburg" → "Johannesburg"). Filter on
+        // metro, not the typed city, so Sandton, Umhlanga or Milnerton listings
+        // show under their city (WEB-L03-02).
+        const metro = CITY_LABELS[filters.city] ?? filters.city;
+        q = q.eq("metro", metro);
       }
       if (filters.query && filters.query.trim()) {
         q = q.textSearch("search_tsv", filters.query.trim(), {

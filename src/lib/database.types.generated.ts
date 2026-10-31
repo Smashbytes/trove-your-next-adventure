@@ -1445,6 +1445,7 @@ export type Database = {
           listing_type: Database["public"]["Enums"]["listing_type"]
           lng: number | null
           metadata: Json
+          metro: string | null
           refund_policy: string
           search_tsv: unknown
           slug: string | null
@@ -1481,6 +1482,7 @@ export type Database = {
           listing_type: Database["public"]["Enums"]["listing_type"]
           lng?: number | null
           metadata?: Json
+          metro?: string | null
           refund_policy?: string
           search_tsv?: unknown
           slug?: string | null
@@ -1517,6 +1519,7 @@ export type Database = {
           listing_type?: Database["public"]["Enums"]["listing_type"]
           lng?: number | null
           metadata?: Json
+          metro?: string | null
           refund_policy?: string
           search_tsv?: unknown
           slug?: string | null
@@ -2098,6 +2101,7 @@ export type Database = {
           of_listing: string | null
           photos: string[]
           rating: number
+          site_hidden_at: string | null
         }
         Insert: {
           body?: string | null
@@ -2109,6 +2113,7 @@ export type Database = {
           of_listing?: string | null
           photos?: string[]
           rating: number
+          site_hidden_at?: string | null
         }
         Update: {
           body?: string | null
@@ -2120,6 +2125,7 @@ export type Database = {
           of_listing?: string | null
           photos?: string[]
           rating?: number
+          site_hidden_at?: string | null
         }
         Relationships: [
           {
@@ -3136,6 +3142,7 @@ export type Database = {
           listing_type: Database["public"]["Enums"]["listing_type"] | null
           lng: number | null
           metadata: Json | null
+          metro: string | null
           rating_avg: number | null
           refund_policy: string | null
           review_count: number | null
@@ -3650,6 +3657,16 @@ export type Database = {
         Returns: number
       }
       process_account_closures: { Args: never; Returns: Json }
+      public_reviews: {
+        Args: { p_limit?: number }
+        Returns: {
+          created_at: string
+          location: string
+          name: string
+          quote: string
+          rating: number
+        }[]
+      }
       record_share_click: {
         Args: {
           p_code: string
@@ -3769,6 +3786,10 @@ export type Database = {
       }
       trove_generate_slug: { Args: { input: string }; Returns: string }
       trove_invoke_job: { Args: { p_function_name: string }; Returns: number }
+      trove_listing_metro: {
+        Args: { p_city: string; p_lat: number; p_lng: number }
+        Returns: string
+      }
       trove_refund_terms: { Args: { p_booking_id: string }; Returns: Json }
       trove_request_account_closure: {
         Args: { p_by: string; p_reason: string; p_user: string }
