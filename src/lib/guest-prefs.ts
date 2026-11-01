@@ -4,6 +4,10 @@
 // cache (see `hydratePrefsFromProfile`); every change goes to both
 // (`saveGuestPrefs`). Product-analytics consent and the "onboarded" flag stay
 // per-device on purpose.
+//
+// Shared phones (GST-L04-01): the personal fields are tagged with the account
+// they belong to (`owner`) and wiped on sign-out, so the next person to sign in
+// on this device never sees, or inherits, someone else's birthday or gender.
 
 import { supabase } from "./supabase";
 import type { Profile } from "./database.types";
@@ -20,6 +24,9 @@ export interface GuestPrefs {
   /** PostHog product analytics — on by default (Privacy Policy: legitimate
    * interest, anonymised), switchable in Settings → Privacy & data. */
   analytics: boolean;
+  /** Whose personal fields these are: an account id, `null` for choices made
+   * here while signed out. Missing on caches written before GST-L04-01. */
+  owner?: string | null;
 }
 
 const DEFAULTS: GuestPrefs = {
@@ -31,6 +38,8 @@ const DEFAULTS: GuestPrefs = {
   onboarded: false,
   analytics: true,
 };
+
+const PERSONAL: Array<keyof GuestPrefs> = ["interests", "city", "dob", "gender", "notifs"];
 
 export function getGuestPrefs(): GuestPrefs {
   if (typeof window === "undefined") return DEFAULTS;
@@ -82,7 +91,8 @@ function toProfileColumns(patch: Partial<GuestPrefs>): ProfilePrefsUpdate {
  * Throws if the account update fails, so callers can tell the guest.
  */
 export async function saveGuestPrefs(userId: string | null | undefined, patch: Partial<GuestPrefs>) {
-  const next = patchGuestPrefs(patch);
+  const personal = PERSONAL.some((k) => patch[k] !== undefined);
+  const next = patchGuestPrefs(personal ? { ...patch, owner: userId ?? null } : patch);
   const cols = toProfileColumns(patch);
   if (userId && Object.keys(cols).length) {
     const { error } = await supabase.from("profiles").update(cols).eq("id", userId);
@@ -91,10 +101,22 @@ export async function saveGuestPrefs(userId: string | null | undefined, patch: P
   return next;
 }
 
+/** Sign-out: drop the personal fields; analytics consent and "onboarded" stay. */
+export function forgetPersonalPrefs() {
+  const { analytics, onboarded } = getGuestPrefs();
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...DEFAULTS, analytics, onboarded, owner: null }));
+  } catch {
+    /* storage blocked: nothing was cached either */
+  }
+}
+
 /**
  * Called when the profile loads. The account wins; but if the account has never
- * stored choices and this device has some (picked before migration 0031), push
- * the device's choices up once instead of wiping them.
+ * stored choices and this device has some that were picked here while signed
+ * out, push those up once instead of wiping them. Another account's cache, or
+ * an untagged one, is never copied (GST-L04-01).
  */
 export function hydratePrefsFromProfile(profile: Profile) {
   const local = getGuestPrefs();
@@ -102,7 +124,7 @@ export function hydratePrefsFromProfile(profile: Profile) {
     (profile.interests ?? []).length === 0 && !profile.date_of_birth && !profile.gender;
   const localHasData = local.interests.length > 0 || !!local.dob || !!local.gender;
 
-  if (serverEmpty && localHasData) {
+  if (serverEmpty && localHasData && local.owner === null) {
     void saveGuestPrefs(profile.id, {
       interests: local.interests,
       dob: local.dob,
@@ -114,9 +136,11 @@ export function hydratePrefsFromProfile(profile: Profile) {
   }
 
   const notifs = profile.notification_prefs as Partial<GuestPrefs["notifs"]> | null;
+  const ownCache = local.owner === profile.id || local.owner === null;
   patchGuestPrefs({
+    owner: profile.id,
     interests: profile.interests ?? [],
-    city: profile.city ?? local.city,
+    city: profile.city ?? (ownCache ? local.city : null),
     dob: profile.date_of_birth ?? null,
     gender: profile.gender ?? null,
     notifs: { ...DEFAULTS.notifs, ...(notifs ?? {}) },

@@ -3,6 +3,8 @@ import { Heart } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { SpotCard } from "@/components/SpotCard";
 import { LoadMore } from "@/components/LoadMore";
+import { SignInRequired } from "@/components/SignInRequired";
+import { useAuth } from "@/lib/auth";
 import { useSavedSpots } from "@/lib/listings-api";
 
 export const Route = createFileRoute("/saved")({
@@ -11,6 +13,18 @@ export const Route = createFileRoute("/saved")({
 });
 
 function SavedPage() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return (
+      <ResponsiveShell title="Saved" maxWidth="max-w-[1040px]">
+        <SignInRequired icon={Heart} message="Sign in to see the spots you saved." />
+      </ResponsiveShell>
+    );
+  }
+  return <SavedList />;
+}
+
+function SavedList() {
   const savedQuery = useSavedSpots();
   const saved = savedQuery.data?.pages.flatMap((p) => p.spots) ?? [];
   const total = savedQuery.data?.pages[0]?.total ?? 0;

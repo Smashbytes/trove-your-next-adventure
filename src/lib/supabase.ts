@@ -42,6 +42,11 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
   });
 }
 
+// Read before the client parses (and clears) the URL: /reset-password shows its
+// form only for a real recovery link, never to whoever is signed in (GST-L04-04).
+export const arrivedWithRecoveryHash =
+  typeof window !== 'undefined' && /(^#|&)type=recovery(&|$)/.test(window.location.hash);
+
 export const supabase = createClient<Database>(url, key, {
   auth: {
     persistSession: true,

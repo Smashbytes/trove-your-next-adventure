@@ -11,6 +11,7 @@ import { Field, fieldInputCls } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/errors";
+import { PASSWORD_HINT, passwordProblem } from "@/lib/password";
 import { patchGuestPrefs, getGuestPrefs, saveGuestPrefs } from "@/lib/guest-prefs";
 import { CATEGORIES, CITIES, nearestCity } from "@/lib/format";
 import { useTopLevelCategories } from "@/lib/listings-api";
@@ -87,7 +88,8 @@ function Onboarding() {
     const errs: AccountErrors = {};
     if (fullName.trim().length < 2) errs.fullName = "Tell us your name.";
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) errs.email = "Enter a valid email address.";
-    if (password.length < 8) errs.password = "Use at least 8 characters.";
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) errs.password = pwProblem;
     setAccErr(errs);
     if (errs.fullName) return nameRef.current?.focus();
     if (errs.email) return emailRef.current?.focus();
@@ -95,9 +97,16 @@ function Onboarding() {
 
     setBusy(true);
     try {
-      const { error } = await signUpWithEmail(email.trim(), password, fullName.trim());
+      const { error, alreadyRegistered } = await signUpWithEmail(email.trim(), password, fullName.trim());
       if (error) {
         setAccErr({ form: friendlyError(error, "We couldn't create your account. Try again.") });
+        return;
+      }
+      // No code was sent (GST-L04-06). Stay neutral: don't confirm the account exists.
+      if (alreadyRegistered) {
+        setAccErr({
+          form: "If you already have a TROVE account with this email, log in or reset your password.",
+        });
         return;
       }
       setPin(["", "", "", "", "", ""]);
@@ -292,7 +301,7 @@ function Onboarding() {
                   </Field>
                   <Field label="Password" error={accErr.password}>
                     <div className="flex items-center gap-2">
-                      <input ref={pwRef} value={password} onChange={(e) => setPassword(e.target.value)} type={showPw ? "text" : "password"} placeholder="Min. 8 characters" autoComplete="new-password" className={fieldInputCls} />
+                      <input ref={pwRef} value={password} onChange={(e) => setPassword(e.target.value)} type={showPw ? "text" : "password"} placeholder={PASSWORD_HINT} autoComplete="new-password" className={fieldInputCls} />
                       <button
                         type="button"
                         onClick={() => setShowPw((s) => !s)}

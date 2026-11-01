@@ -50,12 +50,10 @@ function ProfilePage() {
 
   async function handleSignOut() {
     setSigningOut(true);
-    const ok = await signOut();
+    // If TROVE can't be reached, signOut() signs this device out and reloads
+    // with its own notice.
+    await signOut();
     setSigningOut(false);
-    if (!ok) {
-      toast.error("We couldn't sign you out. Check your connection and try again.");
-      return;
-    }
     toast.success("You're signed out. See you soon!");
     navigate({ to: "/" });
   }
