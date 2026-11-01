@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Field, fieldInputCls } from "@/components/Field";
-import { supabase } from "@/lib/supabase";
+import { arrivedWithRecoveryHash, supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { friendlyError } from "@/lib/errors";
+import { PASSWORD_HINT, passwordProblem } from "@/lib/password";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({ meta: [{ title: "Reset your password — TROVE" }] }),
@@ -50,6 +51,9 @@ function ResetPasswordPage() {
         } else if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) return fail(error);
+        } else if (!arrivedWithRecoveryHash) {
+          // No recovery link: being signed in isn't enough (GST-L04-04).
+          return fail(null);
         } else {
           const { data } = await supabase.auth.getSession();
           if (!data.session) {
@@ -79,7 +83,8 @@ function ResetPasswordPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: typeof errors = {};
-    if (password.length < 8) next.password = "Use at least 8 characters.";
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) next.password = pwProblem;
     else if (confirm !== password) next.confirm = "The passwords don't match.";
     setErrors(next);
     if (next.password) return pwRef.current?.focus();
@@ -151,7 +156,7 @@ function ResetPasswordPage() {
           <form onSubmit={submit} noValidate className="pt-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Account recovery</p>
             <h1 className="mt-2 font-display text-3xl leading-tight">Set a new password</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">At least 8 characters. You'll be signed in straight away.</p>
+            <p className="mt-1.5 text-sm text-muted-foreground">{PASSWORD_HINT}. You'll be signed in straight away.</p>
             <div className="mt-6 space-y-3">
               <Field label="New password" error={errors.password}>
                 <div className="flex items-center gap-2">
@@ -161,7 +166,7 @@ function ResetPasswordPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 8 characters, a letter and a number"
                     className={fieldInputCls}
                   />
                   <button

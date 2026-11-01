@@ -2,7 +2,86 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { HostProfile, Profile } from './database.types';
-import { hydratePrefsFromProfile } from './guest-prefs';
+import { forgetPersonalPrefs, hydratePrefsFromProfile } from './guest-prefs';
+import { queryClient } from './query-client';
+import { clearCheckoutIntent, clearPendingPayment } from './store';
+
+// ---------------------------------------------------------------------------
+// Sign-out after 14 days without use (D-059, GST-L04-03)
+// ---------------------------------------------------------------------------
+// The Free plan can't time-box sessions on the server, so the app does it (the
+// same rule as the Engine): every visit and interaction stamps this device; a
+// session found more than 14 days after the last stamp is signed out before
+// anything loads.
+
+const LAST_ACTIVE_KEY = 'trove:last-active';
+const IDLE_LIMIT_MS = 14 * 24 * 60 * 60 * 1000;
+const STAMP_EVERY_MS = 5 * 60 * 1000;
+/** Shown once on the next screen after the app signs someone out by itself. */
+export const SIGNED_OUT_NOTICE_KEY = 'trove:signed-out-notice';
+const IDLE_NOTICE =
+  "You were signed out because this device hadn't used TROVE for 14 days. Sign in again to continue.";
+
+function readLastActive(): number | null {
+  try {
+    const value = Number(localStorage.getItem(LAST_ACTIVE_KEY));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function stampActive(force = false) {
+  try {
+    const last = readLastActive();
+    if (force || !last || Date.now() - last > STAMP_EVERY_MS) {
+      localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+    }
+  } catch {
+    // Storage blocked (private mode): the idle rule just doesn't apply.
+  }
+}
+
+function idleTooLong(): boolean {
+  const last = readLastActive();
+  return last !== null && Date.now() - last > IDLE_LIMIT_MS;
+}
+
+function leaveNotice(message: string) {
+  try {
+    sessionStorage.setItem(SIGNED_OUT_NOTICE_KEY, message);
+  } catch {
+    // ignore
+  }
+}
+
+/** Nothing from the last guest stays on the device or in memory (GST-L04-01). */
+function forgetDeviceData() {
+  queryClient.clear();
+  forgetPersonalPrefs();
+  try {
+    clearPendingPayment();
+    clearCheckoutIntent();
+    localStorage.removeItem(LAST_ACTIVE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// supabase-js keeps the session when the logout request fails (no signal),
+// with any scope: it returns the error before removing the stored session
+// (GST-L04-02). Drop this device's copy ourselves; the caller reloads so the
+// client starts from the cleared storage.
+function forgetSessionOnThisDevice() {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('sb-') && key.includes('-auth-token')) localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+  forgetDeviceData();
+}
 
 // One profile request per signed-in user for the whole page (module scope, so
 // it survives the provider remounting during hydration).
@@ -39,10 +118,16 @@ interface AuthContextValue {
   openAuthModal: () => void;
   closeAuthModal: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  /** `alreadyRegistered`: Supabase sent no code because the email has an account (GST-L04-06). */
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    fullName: string,
+  ) => Promise<{ error: string | null; alreadyRegistered: boolean }>;
   verifyEmailOtp: (email: string, token: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<boolean>;
+  /** Signs out everywhere; if the request fails, at least this device is signed out (page reloads). */
+  signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -76,10 +161,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!cancelled) setIsLoading(false);
     }, 8000);
 
+    // Email links (/reset-password, the sign-up confirmation) sign the guest in
+    // on purpose, so an old stamp must not sign them straight back out.
+    const fromEmailLink =
+      window.location.pathname.startsWith('/reset-password') ||
+      new URLSearchParams(window.location.search).has('verified');
+
     supabase.auth
       .getSession()
-      .then(({ data: { session } }) => {
+      .then(async ({ data: { session } }) => {
         if (cancelled) return;
+        if (session && !fromEmailLink && idleTooLong()) {
+          leaveNotice(IDLE_NOTICE);
+          const { error } = await supabase.auth.signOut({ scope: 'local' });
+          if (error) {
+            forgetSessionOnThisDevice();
+            window.location.reload();
+            return;
+          }
+          if (cancelled) return;
+          session = null;
+        } else if (session) {
+          stampActive(fromEmailLink);
+        }
         setSession(session);
         if (session) fetchProfile(session.user.id);
         else setIsLoading(false);
@@ -111,6 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setHostProfile(null);
         setIsLoading(false);
         setShowAuthModal(false);
+        // Any sign-out (button, idle rule, session ended elsewhere) leaves
+        // nothing personal behind for the next person on this device.
+        if (event === 'SIGNED_OUT') forgetDeviceData();
       }
     });
 
@@ -120,6 +227,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  // D-059: keep stamping while the guest uses the app; a tab left open for 14
+  // days is signed out the moment it's looked at again.
+  const signedIn = !!session;
+  useEffect(() => {
+    if (!signedIn) return;
+    const onActivity = () => stampActive();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (idleTooLong()) {
+        leaveNotice(IDLE_NOTICE);
+        void supabase.auth.signOut({ scope: 'local' }).then(({ error }) => {
+          if (error) forgetSessionOnThisDevice();
+          window.location.replace('/');
+        });
+        return;
+      }
+      stampActive();
+    };
+    window.addEventListener('pointerdown', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pointerdown', onActivity);
+      window.removeEventListener('keydown', onActivity);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [signedIn]);
 
   // getSession() and the INITIAL_SESSION / SIGNED_IN events all report the same
   // user on load, and the provider can mount twice while the page hydrates:
@@ -144,12 +279,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error) setShowAuthModal(false);
+    if (!error) {
+      stampActive(true);
+      setShowAuthModal(false);
+    }
     return { error: error?.message ?? null };
   };
 
   const signUpWithEmail = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -158,7 +296,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         emailRedirectTo: `${guestAppUrl()}/onboarding?verified=1`,
       },
     });
-    return { error: error?.message ?? null };
+    if (error) return { error: error.message, alreadyRegistered: false };
+    // Supabase hides whether an email is taken: for an existing account it
+    // returns a user with no identities and sends nothing.
+    const alreadyRegistered = !!data.user && (data.user.identities?.length ?? 0) === 0;
+    return { error: null, alreadyRegistered };
   };
 
   const verifyEmailOtp = async (email: string, token: string) => {
@@ -167,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       token,
       type: 'signup',
     });
+    if (!error) stampActive(true);
     return { error: error?.message ?? null };
   };
 
@@ -179,11 +322,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Sign out everywhere (revokes the refresh token on the server). If the
-   * server call fails or stalls, still end the session on this device so the
-   * button never "does nothing". Returns false only if nothing could be done.
+   * request fails or stalls, sign this device out anyway and reload, so the
+   * button never "does nothing" and the session can't come back (GST-L04-02).
    */
-  const signOut = async (): Promise<boolean> => {
-    const local = () => supabase.auth.signOut({ scope: 'local' });
+  const signOut = async (): Promise<void> => {
+    let failed = false;
     try {
       const result = await Promise.race([
         supabase.auth.signOut(),
@@ -192,21 +335,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ),
       ]);
       if (result.error) {
-        console.error('[auth] global sign-out failed, ending local session:', result.error);
-        await local();
+        console.error('[auth] sign-out failed:', result.error);
+        failed = true;
       }
     } catch (error) {
-      console.error('[auth] sign-out threw, ending local session:', error);
-      try {
-        await local();
-      } catch {
-        return false;
-      }
+      console.error('[auth] sign-out threw:', error);
+      failed = true;
     }
-    setSession(null);
-    setProfile(null);
-    setHostProfile(null);
-    return true;
+    if (!failed) {
+      forgetDeviceData();
+      setSession(null);
+      setProfile(null);
+      setHostProfile(null);
+      return;
+    }
+    // The request didn't reach TROVE. Sign this device out anyway and say so:
+    // the session may still be live on other devices.
+    forgetSessionOnThisDevice();
+    leaveNotice(
+      "Signed out on this device. We couldn't reach TROVE, so you may still be signed in on other devices. Sign in and out again when you're back online.",
+    );
+    window.location.replace('/');
   };
 
   const refreshProfile = async () => {

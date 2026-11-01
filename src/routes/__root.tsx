@@ -2,7 +2,7 @@ import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-r
 import { QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthProvider, SIGNED_OUT_NOTICE_KEY, useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 // These are only needed after a tap (sign-in), once signed in (live
@@ -122,7 +122,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function AppWithAuth() {
-  const { showAuthModal, closeAuthModal, isAuthenticated, profile } = useAuth();
+  const { showAuthModal, closeAuthModal, isAuthenticated, isLoading, profile } = useAuth();
   // Closing (14-day grace): nothing else until they keep it or sign out.
   const closingSince = isAuthenticated && profile?.deletion_requested_at && !profile.anonymised_at ? profile.deletion_requested_at : null;
   const [authLoaded, setAuthLoaded] = useState(false);
@@ -136,6 +136,20 @@ function AppWithAuth() {
       return false;
     }
   });
+
+  // Say why, once, when the app signed the guest out by itself (14 days idle,
+  // or sign-out while offline).
+  useEffect(() => {
+    if (isLoading) return;
+    try {
+      const notice = sessionStorage.getItem(SIGNED_OUT_NOTICE_KEY);
+      if (!notice) return;
+      sessionStorage.removeItem(SIGNED_OUT_NOTICE_KEY);
+      toast(notice, { duration: 10_000 });
+    } catch {
+      // Storage blocked: nothing to show.
+    }
+  }, [isLoading]);
 
   // Fetch the sign-in dialog in the background once the page is idle, so it
   // opens instantly when someone taps "Log in".

@@ -3,6 +3,8 @@ import { Ticket, ChevronRight } from "lucide-react";
 import { ResponsiveShell } from "@/components/desktop/ResponsiveShell";
 import { isActiveBooking, useMyBookings, type BookingStatusView, type BookingView } from "@/lib/bookings-api";
 import { LoadMore } from "@/components/LoadMore";
+import { SignInRequired } from "@/components/SignInRequired";
+import { useAuth } from "@/lib/auth";
 import type { Spot } from "@/lib/spots";
 
 const WARN = "bg-warning/15 text-warning";
@@ -29,6 +31,18 @@ export const Route = createFileRoute("/tickets")({
 });
 
 function TicketsPage() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return (
+      <ResponsiveShell title="My Tickets">
+        <SignInRequired icon={Ticket} message="Sign in to see your tickets and bookings." />
+      </ResponsiveShell>
+    );
+  }
+  return <TicketsList />;
+}
+
+function TicketsList() {
   const bookingsQuery = useMyBookings();
   const { isLoading } = bookingsQuery;
   const bookings = bookingsQuery.data?.pages.flatMap((p) => p.bookings) ?? [];

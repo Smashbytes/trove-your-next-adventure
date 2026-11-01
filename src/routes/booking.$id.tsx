@@ -3,9 +3,11 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2, ArrowLeft, MessageCircle, Users2, Send, XCircle, RotateCcw, Star, Share2,
-  Hourglass, AlertTriangle, LifeBuoy,
+  Hourglass, AlertTriangle, LifeBuoy, Ticket as TicketIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SignInRequired } from "@/components/SignInRequired";
+import { useAuth } from "@/lib/auth";
 import { friendlyError } from "@/lib/errors";
 import {
   isActiveBooking, refundPolicyText, useBooking, useCancelBooking, useMarkSplitPaid,
@@ -87,6 +89,18 @@ function StatusIcon({ tone, spin }: { tone: Tone; spin?: boolean }) {
 }
 
 function BookingPage() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) {
+    return (
+      <main className="mx-auto max-w-md px-6 pt-10">
+        <SignInRequired icon={TicketIcon} message="Sign in to see this ticket." />
+      </main>
+    );
+  }
+  return <BookingDetails />;
+}
+
+function BookingDetails() {
   const { id } = useParams({ from: "/booking/$id" });
   const { data: booking, isLoading } = useBooking(id);
   const markPaid = useMarkSplitPaid();
